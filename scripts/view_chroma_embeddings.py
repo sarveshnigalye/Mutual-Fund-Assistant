@@ -274,3 +274,4 @@ def display_chroma_embeddings():
 
 if __name__ == "__main__":
     display_chroma_embeddings()
+

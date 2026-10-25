@@ -109,6 +109,10 @@ class LLMGenerator:
             return "I don't have verified information on this. Please check the official HDFC AMC website: https://www.hdfcfund.com"
 
 
-# Re-export RAGPipeline and rag_pipeline for convenience and backwards compatibility
-from app.core.rag_pipeline import RAGPipeline, rag_pipeline, rag_pipeline_instance
+# Module-level lazy attribute access to prevent circular import between generator and rag_pipeline
+def __getattr__(name: str):
+    if name in ("RAGPipeline", "rag_pipeline", "rag_pipeline_instance"):
+        import app.core.rag_pipeline as rp
+        return getattr(rp, name)
+    raise AttributeError(f"module '{__name__}' has no attribute '{name}'")
 
