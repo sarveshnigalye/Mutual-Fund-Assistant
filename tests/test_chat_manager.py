@@ -104,3 +104,54 @@ def test_rename_and_auto_title(temp_manager):
 
     updated_thread = temp_manager.get_thread(thread.thread_id)
     assert updated_thread.title == "Small Cap Exit Load FAQ"
+
+
+def test_auto_title_variations(temp_manager):
+    thread1 = temp_manager.create_thread("New Chat")
+    # Short query (<6 words) should not have trailing ellipsis
+    title1 = temp_manager.auto_title_thread(thread1.thread_id, "Expense ratio query")
+    assert title1 == "Expense ratio query"
+
+    thread2 = temp_manager.create_thread("New Chat")
+    # Empty query should keep 'New Chat'
+    title2 = temp_manager.auto_title_thread(thread2.thread_id, "   ")
+    assert title2 == "New Chat"
+
+
+def test_thread_history_with_limit(temp_manager):
+    thread = temp_manager.create_thread("Pagination Test")
+    for i in range(1, 6):
+        temp_manager.add_message(thread.thread_id, "user", f"User query {i}")
+        temp_manager.add_message(thread.thread_id, "assistant", f"Assistant answer {i}")
+
+    # Total messages: 10
+    full_thread = temp_manager.get_thread(thread.thread_id)
+    assert full_thread.message_count == 10
+    assert len(full_thread.messages) == 10
+
+    # Paginated: last 4 messages in chronological order
+    limited_thread = temp_manager.get_thread(thread.thread_id, limit=4)
+    assert limited_thread.message_count == 10  # Total remains 10
+    assert len(limited_thread.messages) == 4
+    assert limited_thread.messages[0].content == "User query 4"
+    assert limited_thread.messages[1].content == "Assistant answer 4"
+    assert limited_thread.messages[2].content == "User query 5"
+    assert limited_thread.messages[3].content == "Assistant answer 5"
+
+
+def test_nonexistent_thread_handling(temp_manager):
+    # Nonexistent thread returns None
+    assert temp_manager.get_thread("nonexistent-id-12345") is None
+    assert temp_manager.get_thread_history("nonexistent-id-12345") == []
+
+    # Adding message to nonexistent thread auto-creates the thread
+    msg = temp_manager.add_message(
+        thread_id="nonexistent-id-auto",
+        role="user",
+        content="Auto create thread test",
+    )
+    assert msg.thread_id != "nonexistent-id-auto"  # A valid UUID was assigned
+    created = temp_manager.get_thread(msg.thread_id)
+    assert created is not None
+    assert len(created.messages) == 1
+

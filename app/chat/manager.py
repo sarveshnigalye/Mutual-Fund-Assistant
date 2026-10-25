@@ -115,8 +115,8 @@ class ChatThreadManager:
             )
         return threads
 
-    def get_thread(self, thread_id: str) -> Optional[Thread]:
-        """Retrieves a specific thread along with its full message history."""
+    def get_thread(self, thread_id: str, limit: Optional[int] = None) -> Optional[Thread]:
+        """Retrieves a specific thread along with its full or paginated message history."""
         with self._get_connection() as conn:
             cursor = conn.execute(
                 "SELECT thread_id, title, created_at, updated_at FROM threads WHERE thread_id = ?",
@@ -126,11 +126,26 @@ class ChatThreadManager:
             if not t_row:
                 return None
 
-            cursor = conn.execute(
-                "SELECT message_id, thread_id, role, content, source_url, created_at FROM messages WHERE thread_id = ? ORDER BY created_at ASC",
+            # Count total messages in thread
+            count_cursor = conn.execute(
+                "SELECT COUNT(*) FROM messages WHERE thread_id = ?",
                 (thread_id,),
             )
-            m_rows = cursor.fetchall()
+            total_messages = count_cursor.fetchone()[0]
+
+            if limit and limit > 0:
+                # Retrieve the most recent N messages, ordered chronologically
+                cursor = conn.execute(
+                    "SELECT message_id, thread_id, role, content, source_url, created_at FROM messages WHERE thread_id = ? ORDER BY created_at DESC LIMIT ?",
+                    (thread_id, limit),
+                )
+                m_rows = list(reversed(cursor.fetchall()))
+            else:
+                cursor = conn.execute(
+                    "SELECT message_id, thread_id, role, content, source_url, created_at FROM messages WHERE thread_id = ? ORDER BY created_at ASC",
+                    (thread_id,),
+                )
+                m_rows = cursor.fetchall()
 
         messages = [
             Message(
@@ -149,13 +164,13 @@ class ChatThreadManager:
             title=t_row["title"],
             created_at=t_row["created_at"],
             updated_at=t_row["updated_at"],
-            message_count=len(messages),
+            message_count=total_messages,
             messages=messages,
         )
 
-    def get_thread_history(self, thread_id: str) -> List[Message]:
-        """Returns message list for a thread."""
-        thread = self.get_thread(thread_id)
+    def get_thread_history(self, thread_id: str, limit: Optional[int] = None) -> List[Message]:
+        """Returns message list for a thread, with optional limit."""
+        thread = self.get_thread(thread_id, limit=limit)
         return thread.messages if thread else []
 
     def add_message(
@@ -224,6 +239,9 @@ class ChatThreadManager:
 
         # Extract first 6 words
         words = first_query.strip().split()
+        if not words:
+            return "New Chat"
+
         short_title = " ".join(words[:6])
         if len(words) > 6:
             short_title += "..."
