@@ -625,121 +625,65 @@ def render_user_message(query: str, created_at: str = ""):
             pass
 
     safe_query = format_markdown_body(query)
-    user_html = f"""
-    <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-left: 2rem;">
-        <div style="background-color: #222A3D; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 0.85rem 1rem; max-width: 80%; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
-            <p style="font-family: 'Inter', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.5;">
-                {safe_query}
-            </p>
-            <div style="display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 6px; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #64748B;">
-                <span>{timestamp}</span>
-            </div>
-        </div>
-        <div style="width: 32px; height: 32px; border-radius: 4px; background-color: #2D3449; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: #DAE2FD; font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; flex-shrink: 0;">
-            CL
-        </div>
-    </div>
-    """
-    render_html(user_html)
+    user_html = (
+        '<div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-left: 2rem;">'
+        '<div style="background-color: #222A3D; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 0.85rem 1rem; max-width: 80%; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">'
+        f'<p style="font-family: \'Inter\', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.5;">{safe_query}</p>'
+        f'<div style="display: flex; justify-content: flex-end; align-items: center; gap: 4px; margin-top: 6px; font-family: \'JetBrains Mono\', monospace; font-size: 10px; color: #64748B;"><span>{timestamp}</span></div>'
+        '</div>'
+        '<div style="width: 32px; height: 32px; border-radius: 4px; background-color: #2D3449; border: 1px solid rgba(255,255,255,0.1); display: flex; align-items: center; justify-content: center; color: #DAE2FD; font-family: \'JetBrains Mono\', monospace; font-size: 11px; font-weight: 600; flex-shrink: 0;">CL</div>'
+        '</div>'
+    )
+    st.markdown(user_html, unsafe_allow_html=True)
 
 
 def render_assistant_message(content: str, source_url: Optional[str] = None):
-    """Renders verified fact response with sapphire accent, metrics strip, and Groww citation badge."""
+    """Renders verified fact response with sapphire accent and clean source link."""
     parsed = parse_assistant_message(content, default_source=source_url)
     clean_body = format_markdown_body(parsed["clean_body"])
     scheme_name = html.escape(parsed["scheme_name"])
     resolved_source = parsed["source_url"]
     is_refusal = parsed["is_refusal"]
-    metrics = parsed["metrics"]
-    scrape_date = parsed["scrape_date"]
+    scrape_date = html.escape(parsed["scrape_date"])
 
     if is_refusal:
-        card_html = f"""
-        <div style="display: flex; justify-content: flex-start; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 1.5rem;">
-            <div style="width: 34px; height: 34px; border-radius: 4px; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); display: flex; align-items: center; justify-content: center; color: #F59E0B; font-size: 18px; flex-shrink: 0;">
-                ⚖️
-            </div>
-            <div style="flex: 1; max-width: 820px; background-color: #131B2E; border: 1px solid rgba(245, 158, 11, 0.25); border-left: 4px solid #F59E0B; border-radius: 6px; padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.6rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); padding: 2px 7px; border-radius: 3px; display: inline-flex; align-items: center; gap: 4px;">
-                        🛡️ REGULATORY NON-ADVISORY GUARD
-                    </span>
-                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #94A3B8;">SEBI Guideline Compliant</span>
-                </div>
-                <div style="font-family: 'Inter', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.6;">
-                    {clean_body}
-                </div>
-                <div style="background-color: rgba(245, 158, 11, 0.05); border: 1px dashed rgba(245, 158, 11, 0.2); border-radius: 4px; padding: 0.45rem 0.75rem; font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #F59E0B;">
-                    Automated financial advisory, portfolio evaluation, and return forecasts are strictly prohibited. For financial decisions, consult a SEBI-registered Investment Advisor.
-                </div>
-            </div>
-        </div>
-        """
+        card_html = (
+            '<div style="display: flex; justify-content: flex-start; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 1.5rem;">'
+            '<div style="width: 34px; height: 34px; border-radius: 4px; background-color: rgba(245, 158, 11, 0.15); border: 1px solid rgba(245, 158, 11, 0.35); display: flex; align-items: center; justify-content: center; color: #F59E0B; font-size: 18px; flex-shrink: 0;">⚖️</div>'
+            '<div style="flex: 1; max-width: 820px; background-color: #131B2E; border: 1px solid rgba(245, 158, 11, 0.25); border-left: 4px solid #F59E0B; border-radius: 6px; padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.6rem;">'
+            '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">'
+            '<span style="font-family: \'JetBrains Mono\', monospace; font-size: 10px; font-weight: 600; background-color: rgba(245, 158, 11, 0.15); color: #F59E0B; border: 1px solid rgba(245, 158, 11, 0.3); padding: 2px 7px; border-radius: 3px;">🛡️ REGULATORY NON-ADVISORY GUARD</span>'
+            '<span style="font-family: \'JetBrains Mono\', monospace; font-size: 11px; color: #94A3B8;">SEBI Guideline Compliant</span>'
+            '</div>'
+            f'<div style="font-family: \'Inter\', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.6;">{clean_body}</div>'
+            '<div style="background-color: rgba(245, 158, 11, 0.05); border: 1px dashed rgba(245, 158, 11, 0.2); border-radius: 4px; padding: 0.45rem 0.75rem; font-family: \'JetBrains Mono\', monospace; font-size: 10px; color: #F59E0B;">Automated financial advisory, portfolio evaluation, and return forecasts are strictly prohibited. For financial decisions, consult a SEBI-registered Investment Advisor.</div>'
+            '</div></div>'
+        )
     else:
-        metrics_html = ""
-        if metrics:
-            metric_cells = []
-            for m in metrics[:4]:
-                metric_cells.append(
-                    f"""
-                    <div style="padding: 0.55rem 0.75rem; border-radius: 4px; background-color: #171F33; border: 1px solid rgba(255,255,255,0.06); display: flex; flex-direction: column;">
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #64748B; text-transform: uppercase; letter-spacing: 0.05em;">{m['label']}</span>
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; color: #DAE2FD; margin-top: 2px;">{m['value']}</span>
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 9px; color: #10B981;">{m['sub']}</span>
-                    </div>
-                    """
-                )
-            metrics_html = f"""
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 0.5rem; margin-top: 0.35rem;">
-                {''.join(metric_cells)}
-            </div>
-            """
-
         citation_html = ""
         if resolved_source:
-            display_url = resolved_source.replace("https://", "").replace("http://", "")
-            citation_html = f"""
-            <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.5rem 0.75rem; background-color: rgba(23, 31, 51, 0.65); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 4px; margin-top: 0.4rem; font-family: 'JetBrains Mono', monospace; font-size: 11px;">
-                <div style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                    <span style="color: #10B981;">🔗</span>
-                    <span style="color: #64748B; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
-                        Source: <span style="color: #DAE2FD; text-decoration: underline;">{display_url}</span>
-                    </span>
-                    <span style="padding: 1px 6px; border-radius: 3px; font-size: 9px; background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25);">
-                        Fetched & Verified
-                    </span>
-                </div>
-                <a href="{resolved_source}" target="_blank" rel="noopener noreferrer" style="color: #B4C5FF; text-decoration: none; font-size: 11px; font-weight: 500; display: inline-flex; align-items: center; gap: 2px;">
-                    Direct Filing Link [Open ↗]
-                </a>
-            </div>
-            """
+            display_url = html.escape(resolved_source.replace("https://", "").replace("http://", ""))
+            citation_html = (
+                '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.45rem 0.75rem; background-color: rgba(23, 31, 51, 0.7); border: 1px solid rgba(255, 255, 255, 0.06); border-radius: 4px; margin-top: 0.5rem; font-family: \'JetBrains Mono\', monospace; font-size: 11px;">'
+                f'<div style="display: flex; align-items: center; gap: 6px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;"><span style="color: #10B981;">🔗</span><span style="color: #64748B;">Source: <span style="color: #DAE2FD; text-decoration: underline;">{display_url}</span></span><span style="padding: 1px 6px; border-radius: 3px; font-size: 9px; background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.25);">Fetched &amp; Verified</span></div>'
+                f'<a href="{html.escape(resolved_source)}" target="_blank" rel="noopener noreferrer" style="color: #B4C5FF; text-decoration: none; font-size: 11px; font-weight: 500;">Direct Filing Link [Open ↗]</a>'
+                '</div>'
+            )
 
-        card_html = f"""
-        <div style="display: flex; justify-content: flex-start; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 1.5rem;">
-            <div style="width: 34px; height: 34px; border-radius: 4px; background-color: #2563EB; border: 1px solid rgba(37, 99, 235, 0.5); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 18px; flex-shrink: 0;">
-                🏦
-            </div>
-            <div style="flex: 1; max-width: 820px; background-color: #131B2E; border: 1px solid rgba(255, 255, 255, 0.08); border-left: 4px solid #2563EB; border-radius: 6px; padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.6rem;">
-                <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
-                    <div style="display: flex; align-items: center; gap: 8px;">
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 600; background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 7px; border-radius: 3px; display: inline-flex; align-items: center; gap: 4px;">
-                            ✓ VERIFIED FACTUAL
-                        </span>
-                        <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #94A3B8;">{scheme_name}</span>
-                    </div>
-                    <span style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #64748B;">Groww Scheme Feed: {scrape_date}</span>
-                </div>
-                <div style="font-family: 'Inter', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.6;">
-                    {clean_body}
-                </div>
-                {metrics_html}
-                {citation_html}
-            </div>
-        </div>
-        """
+        card_html = (
+            '<div style="display: flex; justify-content: flex-start; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-right: 1.5rem;">'
+            '<div style="width: 34px; height: 34px; border-radius: 4px; background-color: #2563EB; border: 1px solid rgba(37, 99, 235, 0.5); display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 18px; flex-shrink: 0;">🏦</div>'
+            '<div style="flex: 1; max-width: 820px; background-color: #131B2E; border: 1px solid rgba(255, 255, 255, 0.08); border-left: 4px solid #2563EB; border-radius: 6px; padding: 1rem 1.15rem; display: flex; flex-direction: column; gap: 0.6rem;">'
+            '<div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">'
+            f'<div style="display: flex; align-items: center; gap: 8px;"><span style="font-family: \'JetBrains Mono\', monospace; font-size: 10px; font-weight: 600; background-color: rgba(16, 185, 129, 0.15); color: #10B981; border: 1px solid rgba(16, 185, 129, 0.3); padding: 2px 7px; border-radius: 3px;">✓ VERIFIED FACTUAL</span><span style="font-family: \'JetBrains Mono\', monospace; font-size: 11px; color: #94A3B8;">{scheme_name}</span></div>'
+            f'<span style="font-family: \'JetBrains Mono\', monospace; font-size: 10px; color: #64748B;">Groww Scheme Feed: {scrape_date}</span>'
+            '</div>'
+            f'<div style="font-family: \'Inter\', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.6;">{clean_body}</div>'
+            f'{citation_html}'
+            '</div></div>'
+        )
 
-    render_html(card_html)
+    st.markdown(card_html, unsafe_allow_html=True)
 
 
 # Render existing thread conversation history
