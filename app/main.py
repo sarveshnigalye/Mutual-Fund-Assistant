@@ -65,18 +65,36 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+import os
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Request
+
 # Include API routes
 app.include_router(router)
 
 
 @app.get("/", tags=["Root"])
-def root():
-    return {
+def root(request: Request):
+    accept_header = request.headers.get("accept", "")
+    index_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html"))
+    if "text/html" in accept_header and os.path.exists(index_path):
+        return FileResponse(index_path)
+
+    return JSONResponse({
         "message": "Welcome to HDFC Mutual Fund FAQ Assistant API",
         "docs_url": "/docs",
         "health_url": "/api/health",
+        "ui_url": "/app",
         "disclaimer": "Facts-only. No investment advice.",
-    }
+    })
+
+
+@app.get("/app", tags=["UI"])
+def serve_ui():
+    index_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "index.html"))
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
+    return JSONResponse({"error": "UI file not found"}, status_code=404)
 
 
 @app.get("/health", tags=["Health"])

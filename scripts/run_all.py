@@ -43,9 +43,10 @@ def main():
     frontend_proc = subprocess.Popen([python_exe, ui_script])
 
     print("\n🎉 Both services are running:")
+    print("   👉 Google Stitch Web UI: http://127.0.0.1:8000/app")
     print("   👉 Streamlit Frontend:   http://localhost:8501")
     print("   👉 FastAPI API Docs:     http://127.0.0.1:8000/docs")
-    print("   👉 FastAPI Health Check: http://127.0.0.1:8000/health")
+    print("   👉 FastAPI Health Check: http://127.0.0.1:8000/api/health")
     print("\nPress Ctrl+C to terminate both servers.\n")
 
     try:

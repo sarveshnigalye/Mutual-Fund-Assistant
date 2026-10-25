@@ -1,0 +1,551 @@
+<!DOCTYPE html>
+<html class="dark" lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+  <title>HDFC Mutual Fund Facts-Only Assistant</title>
+  <!-- Fonts -->
+  <link href="https://fonts.googleapis.com" rel="preconnect"/>
+  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+  <!-- Tailwind Config -->
+  <script id="tailwind-config">
+    tailwind.config = {
+      darkMode: "class",
+      theme: {
+        extend: {
+          "colors": {
+            "surface": "#0b1326",
+            "surface-dim": "#0b1326",
+            "surface-bright": "#31394d",
+            "surface-container-lowest": "#060e20",
+            "surface-container-low": "#131b2e",
+            "surface-container": "#171f33",
+            "surface-container-high": "#222a3d",
+            "surface-container-highest": "#2d3449",
+            "on-surface": "#dae2fd",
+            "on-surface-variant": "#c3c6d7",
+            "outline": "#8d90a0",
+            "outline-variant": "#434655",
+            "primary": "#b4c5ff",
+            "primary-container": "#2563eb",
+            "on-primary-container": "#eeefff",
+            "secondary": "#4edea3",
+            "tertiary": "#ffb95f",
+            "tertiary-container": "#996100",
+            "error": "#ffb4ab"
+          },
+          "fontFamily": {
+            "body-sm": ["Inter"],
+            "body-md": ["Inter"],
+            "headline-lg": ["Geist"],
+            "headline-xl": ["Geist"],
+            "headline-md": ["Geist"],
+            "label-sm": ["JetBrains Mono"],
+            "label-md": ["JetBrains Mono"],
+            "label-lg": ["JetBrains Mono"]
+          }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="bg-surface text-on-surface antialiased font-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
+  <!-- ==================== TOP NAVIGATION BAR ==================== -->
+  <header class="w-full flex flex-col bg-surface-container-low docked full-width top-0 z-50 sticky border-b border-outline-variant/30">
+    <div class="flex items-center justify-between px-4 lg:px-6 h-14 gap-3">
+      <!-- Brand & Product Identity -->
+      <div class="flex items-center gap-3 shrink-0">
+        <div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary-container font-headline-md shadow-sm">
+          <span class="material-symbols-outlined text-[18px]">verified_user</span>
+        </div>
+        <div class="flex flex-col">
+          <div class="flex items-center gap-2">
+            <span class="font-headline-md text-headline-md font-semibold text-on-surface tracking-tight">HDFC Mutual Fund Facts-Only Assistant</span>
+            <span class="bg-surface-container-high border border-outline-variant/40 text-primary font-label-sm text-label-sm px-1.5 py-0.5 rounded">v1.0 Facts-Only</span>
+          </div>
+        </div>
+      </div>
+      <!-- Grounding Status & New Session CTA -->
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-outline-variant/40 text-secondary font-label-sm text-label-sm">
+          <span class="inline-block w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
+          <span class="hidden sm:inline">Groq Engine Online</span>
+        </div>
+        <div class="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded bg-tertiary-container/30 border border-tertiary/40 text-tertiary font-label-sm text-label-sm">
+          <span class="material-symbols-outlined text-[14px]">gavel</span>
+          <span>SEBI Non-Advisory Grounding</span>
+        </div>
+        <button id="btn-new-session" class="ml-1 px-3 py-1.5 bg-primary-container hover:bg-primary-container/90 text-on-primary-container font-label-md text-label-md rounded active:scale-[0.98] transition-all flex items-center gap-1.5 shadow-sm">
+          <span class="material-symbols-outlined text-[16px]">restart_alt</span>
+          <span>New Session</span>
+        </button>
+      </div>
+    </div>
+    <!-- Mandatory Regulatory Warning Banner -->
+    <div class="w-full bg-tertiary-container/20 border-t border-b border-tertiary/30 px-4 py-1.5 flex items-center justify-between text-tertiary font-label-sm text-label-sm">
+      <div class="flex items-center gap-2 mx-auto text-center truncate">
+        <span class="material-symbols-outlined text-[15px] shrink-0 text-tertiary">warning</span>
+        <span class="truncate">
+          <strong>MANDATORY REGULATORY DISCLAIMER:</strong> Facts-only assistant. No investment advice, opinions, or performance predictions provided. Non-SEBI registered entity. Strictly non-promotional.
+        </span>
+      </div>
+      <span class="hidden md:inline font-label-sm uppercase tracking-widest text-[9px] text-tertiary/70 shrink-0 ml-4">AMFI Ref: 2024-CIR-92</span>
+    </div>
+  </header>
+
+  <!-- ==================== APP CONTAINER / SIDE RAIL + CANVAS ==================== -->
+  <div class="flex min-h-[calc(100vh-84px)] w-full">
+    <!-- Docked Left Terminal Navigation Sidebar (280px) -->
+    <aside class="fixed left-0 top-[84px] bottom-0 w-[280px] hidden lg:flex flex-col justify-between p-4 z-40 bg-surface-container-lowest border-r border-outline-variant/30">
+      <div class="flex flex-col gap-4">
+        <!-- New Query Button -->
+        <button id="btn-new-query" class="w-full py-2.5 px-3 bg-gradient-to-r from-primary-container to-blue-700 hover:from-blue-600 hover:to-blue-800 text-on-primary-container font-label-md text-label-md rounded flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-md">
+          <span class="material-symbols-outlined text-[18px]">add_circle</span>
+          <span class="font-semibold">+ New Query</span>
+        </button>
+        <!-- Sidebar Section Header -->
+        <div class="px-1 flex items-center justify-between">
+          <span class="font-label-sm text-label-sm uppercase text-outline tracking-wider">CONVERSATIONS</span>
+          <span id="threads-count-badge" class="text-outline text-[10px] font-label-sm">0 ACTIVE</span>
+        </div>
+        <!-- Thread list container -->
+        <div id="threads-list" class="flex flex-col gap-1 max-h-[320px] overflow-y-auto"></div>
+        <!-- Scheme Coverage Metric Box -->
+        <div class="mt-4 p-3 rounded bg-surface-container border border-outline-variant/30 flex flex-col gap-2">
+          <div class="flex items-center justify-between">
+            <span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">Covered Schemes (5 Verified)</span>
+            <span class="w-2 h-2 rounded-full bg-secondary"></span>
+          </div>
+          <div class="flex flex-col gap-1 text-[11px] font-body-sm text-outline">
+            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
+              <span class="truncate">Mid-Cap Opp.</span>
+              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
+            </div>
+            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
+              <span class="truncate">Small Cap Fund</span>
+              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
+            </div>
+            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
+              <span class="truncate">Top 100 Large</span>
+              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
+            </div>
+            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
+              <span class="truncate">Silver ETF FoF</span>
+              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
+            </div>
+            <div class="flex items-center justify-between py-0.5">
+              <span class="truncate">Multi-Cap Fund</span>
+              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
+            </div>
+          </div>
+        </div>
+      </div>
+      <!-- Footer Rail Links -->
+      <div class="flex flex-col gap-1 pt-3 border-t border-outline-variant/30 text-on-surface-variant font-label-md text-label-md">
+        <div class="px-3 py-1 text-[11px] text-outline font-label-sm">
+          AMFI Reference: 2024-CIR-92
+        </div>
+      </div>
+    </aside>
+
+    <!-- ==================== MAIN CHAT & DATA CANVAS ==================== -->
+    <main class="flex-1 lg:ml-[280px] flex flex-col justify-between px-4 sm:px-6 lg:px-8 py-6 max-w-5xl mx-auto w-full min-h-[calc(100vh-84px)] pb-36">
+      <!-- Welcome Header & Quick Starters -->
+      <section id="welcome-section" class="flex flex-col gap-4 mb-8">
+        <div class="flex flex-col gap-1">
+          <div class="flex items-center gap-2">
+            <span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-primary-container/20 text-primary border border-primary/30">SEBI NON-ADVISORY COMPLIANT</span>
+            <span class="text-outline text-body-sm">• Strictly Non-Predictive</span>
+          </div>
+          <h1 class="font-headline-xl text-2xl sm:text-3xl font-semibold text-on-surface tracking-tight">
+            Verified Mutual Fund Facts at Your Fingertips
+          </h1>
+          <p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
+            Strictly grounded in official Groww scheme data. Brevity guaranteed (≤ 3 sentences). Zero personal opinion, recommendation, or return guarantees.
+          </p>
+        </div>
+        <!-- Quick Starter Action Chips (Bento Grid) -->
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
+          <!-- Card 1 -->
+          <div onclick="selectStarter('What is the expense ratio and current NAV of HDFC Mid Cap Direct Plan Growth?')" class="p-3.5 rounded bg-surface-container-high border border-outline-variant/30 hover:border-primary/50 transition-all duration-150 cursor-pointer group shadow-sm flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <span class="text-xl">📊</span>
+              <span class="font-label-sm text-label-sm text-outline group-hover:text-primary transition-colors">QUERY</span>
+            </div>
+            <div>
+              <p class="font-body-sm text-body-sm font-medium text-on-surface group-hover:text-primary transition-colors">
+                What is the expense ratio and current NAV of HDFC Mid Cap Direct Plan Growth?
+              </p>
+              <span class="text-[11px] font-label-sm text-outline mt-1 block">Expense &amp; NAV Metrics</span>
+            </div>
+          </div>
+          <!-- Card 2 -->
+          <div onclick="selectStarter('What is the exit load for HDFC Small Cap Fund if redeemed within 1 year?')" class="p-3.5 rounded bg-surface-container-high border border-outline-variant/30 hover:border-primary/50 transition-all duration-150 cursor-pointer group shadow-sm flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <span class="text-xl">⏱️</span>
+              <span class="font-label-sm text-label-sm text-outline group-hover:text-primary transition-colors">QUERY</span>
+            </div>
+            <div>
+              <p class="font-body-sm text-body-sm font-medium text-on-surface group-hover:text-primary transition-colors">
+                What is the exit load for HDFC Small Cap Fund if redeemed within 1 year?
+              </p>
+              <span class="text-[11px] font-label-sm text-outline mt-1 block">Redemption Horizon Terms</span>
+            </div>
+          </div>
+          <!-- Card 3 -->
+          <div onclick="selectStarter('What is the minimum SIP amount for HDFC Top 100 Large Cap Fund?')" class="p-3.5 rounded bg-surface-container-high border border-outline-variant/30 hover:border-primary/50 transition-all duration-150 cursor-pointer group shadow-sm flex flex-col justify-between gap-3">
+            <div class="flex items-start justify-between">
+              <span class="text-xl">💰</span>
+              <span class="font-label-sm text-label-sm text-outline group-hover:text-primary transition-colors">QUERY</span>
+            </div>
+            <div>
+              <p class="font-body-sm text-body-sm font-medium text-on-surface group-hover:text-primary transition-colors">
+                What is the minimum SIP amount for HDFC Top 100 Large Cap Fund?
+              </p>
+              <span class="text-[11px] font-label-sm text-outline mt-1 block">Statutory Minimum Threshold</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Active Message History -->
+      <section id="chat-history" class="flex flex-col gap-6"></section>
+    </main>
+  </div>
+
+  <!-- ==================== FIXED BOTTOM PROMPT & AUDIT BAR ==================== -->
+  <div class="fixed bottom-0 left-0 right-0 lg:left-[280px] bg-surface-container-lowest/95 backdrop-blur-md border-t border-outline-variant/30 p-3 sm:p-4 z-40">
+    <div class="max-w-4xl mx-auto flex flex-col gap-2">
+      <!-- Prompt Bar with Controls -->
+      <form id="chat-form" onsubmit="handleFormSubmit(event)" class="relative flex items-center rounded-lg bg-surface-container-high border border-outline-variant/40 focus-within:border-primary-container focus-within:ring-1 focus-within:ring-primary-container transition-all">
+        <div class="pl-3.5 pr-2 flex items-center text-outline">
+          <span class="material-symbols-outlined text-[20px]">search</span>
+        </div>
+        <input id="query-input" class="w-full bg-transparent border-none text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:ring-0 py-2.5 px-0" placeholder="Ask a scheme fact (TER, NAV, SIP limits, AUM, exit loads)..." type="text" autocomplete="off" />
+        <div class="flex items-center gap-1.5 pr-2 shrink-0">
+          <button type="submit" id="btn-submit" class="px-3.5 py-1.5 rounded bg-primary-container hover:bg-primary-container/90 text-on-primary-container font-label-md text-label-md flex items-center gap-1 shadow-sm active:scale-[0.98] transition-all">
+            <span>Query Facts</span>
+            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
+          </button>
+        </div>
+      </form>
+      <!-- Engine Telemetry & Micro Disclaimer -->
+      <div class="flex items-center justify-between flex-wrap gap-2 px-1 text-[11px] font-label-sm">
+        <div class="flex items-center gap-3 text-outline">
+          <span class="flex items-center gap-1 text-secondary">
+            <span class="inline-block w-1.5 h-1.5 rounded-full bg-secondary"></span>
+            <span>Groq LPU 120B</span>
+          </span>
+          <span>•</span>
+          <span>Latency: ~140ms</span>
+          <span>•</span>
+          <span class="text-primary">Facts-Only Guardrail ON</span>
+        </div>
+        <div class="text-outline truncate">
+          Data cross-referenced with SEBI filings &amp; Groww data feeds. Never constitutes financial advice.
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Interactive Client Script -->
+  <script>
+    let currentThreadId = null;
+
+    function escapeHtml(text) {
+      if (!text) return '';
+      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    }
+
+    function formatMarkdown(text) {
+      let safe = escapeHtml(text);
+      safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+      safe = safe.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
+      safe = safe.replace(/`(.+?)`/g, '<code class="bg-surface-container px-1 py-0.5 rounded text-primary text-xs">$1</code>');
+      safe = safe.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br/>');
+      return safe;
+    }
+
+    async function loadThreads() {
+      try {
+        const res = await fetch('/api/threads');
+        const threads = await res.json();
+        const container = document.getElementById('threads-list');
+        container.innerHTML = '';
+
+        if (!threads || threads.length === 0) {
+          await createNewThread();
+          return;
+        }
+
+        if (!currentThreadId) {
+          currentThreadId = threads[0].thread_id;
+        }
+
+        document.getElementById('threads-count-badge').innerText = `${threads.length} ACTIVE`;
+
+        threads.forEach(t => {
+          const isActive = (t.thread_id === currentThreadId);
+          const el = document.createElement('div');
+          el.className = isActive 
+            ? "bg-surface-container-high text-primary border-l-2 border-primary font-label-md text-label-md px-3 py-2 flex items-center justify-between rounded-r transition-colors group cursor-pointer"
+            : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-label-md text-label-md px-3 py-2 flex items-center justify-between rounded transition-colors group cursor-pointer";
+
+          el.innerHTML = `
+            <div class="flex items-center gap-2 truncate">
+              <span class="material-symbols-outlined text-[16px] ${isActive ? 'text-primary' : 'text-outline'} shrink-0">${isActive ? 'show_chart' : 'trending_up'}</span>
+              <span class="truncate">${escapeHtml(t.title || 'New Chat')}</span>
+            </div>
+            <button class="delete-thread-btn material-symbols-outlined text-[15px] opacity-0 group-hover:opacity-100 text-outline hover:text-error transition-opacity" title="Delete">delete</button>
+          `;
+
+          el.querySelector('.delete-thread-btn').addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await fetch(`/api/threads/${t.thread_id}`, { method: 'DELETE' });
+            if (currentThreadId === t.thread_id) currentThreadId = null;
+            await loadThreads();
+          });
+
+          el.addEventListener('click', () => {
+            currentThreadId = t.thread_id;
+            loadThreads();
+          });
+
+          container.appendChild(el);
+        });
+
+        loadMessages(currentThreadId);
+      } catch (err) {
+        console.error('Error loading threads:', err);
+      }
+    }
+
+    async function createNewThread() {
+      try {
+        const res = await fetch('/api/threads', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ title: 'New Chat' })
+        });
+        const thread = await res.json();
+        currentThreadId = thread.thread_id;
+        await loadThreads();
+      } catch (err) {
+        console.error('Error creating thread:', err);
+      }
+    }
+
+    async function loadMessages(threadId) {
+      if (!threadId) return;
+      try {
+        const res = await fetch(`/api/threads/${threadId}`);
+        const thread = await res.json();
+        const messages = thread.messages || [];
+        const chatHistory = document.getElementById('chat-history');
+        const welcomeSection = document.getElementById('welcome-section');
+
+        chatHistory.innerHTML = '';
+
+        if (messages.length === 0) {
+          welcomeSection.classList.remove('hidden');
+        } else {
+          welcomeSection.classList.add('hidden');
+          messages.forEach(msg => {
+            if (msg.role === 'user') {
+              chatHistory.appendChild(renderUserCard(msg.content, msg.created_at));
+            } else {
+              chatHistory.appendChild(renderAssistantCard(msg.content, msg.source_url));
+            }
+          });
+          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+        }
+      } catch (err) {
+        console.error('Error loading messages:', err);
+      }
+    }
+
+    function renderUserCard(content, createdAt) {
+      const el = document.createElement('div');
+      el.className = "flex justify-end items-start gap-3 pl-8";
+      el.innerHTML = `
+        <div class="p-3.5 rounded-lg bg-surface-container-high border border-outline-variant/40 max-w-xl text-on-surface shadow-sm">
+          <p class="font-body-md text-body-md leading-relaxed">${formatMarkdown(content)}</p>
+          <div class="flex items-center justify-end gap-1 mt-1 font-label-sm text-[10px] text-outline">
+            <span>Audited Session</span>
+          </div>
+        </div>
+        <div class="w-8 h-8 rounded bg-surface-container-highest border border-outline-variant/40 flex items-center justify-center shrink-0 text-on-surface-variant font-label-sm text-label-sm">
+          <span>CL</span>
+        </div>
+      `;
+      return el;
+    }
+
+    function renderAssistantCard(content, sourceUrl) {
+      const el = document.createElement('div');
+      el.className = "flex justify-start items-start gap-3 pr-4 sm:pr-8";
+
+      // Detect refusal
+      const isRefusal = /cannot provide investment advice|facts-only assistant|personal identifiers|non-advisory/i.test(content);
+
+      if (isRefusal) {
+        el.innerHTML = `
+          <div class="w-8 h-8 rounded bg-tertiary-container/30 border border-tertiary/40 flex items-center justify-center shrink-0 text-tertiary shadow-sm">
+            <span class="material-symbols-outlined text-[18px]">gavel</span>
+          </div>
+          <div class="flex-1 flex flex-col gap-3 max-w-3xl">
+            <div class="p-4 sm:p-5 rounded-lg bg-surface-container-low border border-tertiary/30 border-l-4 border-l-tertiary flex flex-col gap-3 shadow-lg">
+              <div class="flex items-center justify-between flex-wrap gap-2">
+                <span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-tertiary/10 text-tertiary border border-tertiary/30 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px]">shield</span>
+                  <span>REGULATORY NON-ADVISORY GUARD</span>
+                </span>
+                <span class="font-label-sm text-label-sm text-outline">SEBI Grounding</span>
+              </div>
+              <div class="font-body-md text-body-md text-on-surface leading-relaxed">${formatMarkdown(content)}</div>
+            </div>
+          </div>
+        `;
+        return el;
+      }
+
+      // Clean citation tags from text for display
+      let cleanText = content.replace(/\[Source:\s*[^\s\]]+\]/g, '').replace(/\[Scraped:\s*[^\s\]]+\]/g, '').replace(/📎\s*Source:\s*https?:\/\/[^\s\n\)]+/g, '').replace(/_Last updated from sources:[^_]+_/g, '').trim();
+
+      // Extract quick metric pills if present
+      let metricHtml = '';
+      const terMatch = cleanText.match(/(?:Expense Ratio|TER)[^0-9]*(\d+(?:\.\d+)?\s*%)/i);
+      const navMatch = cleanText.match(/(?:NAV|Net Asset Value)[^0-9₹]*₹?\s*(\d+(?:\.\d+)?)/i);
+      const aumMatch = cleanText.match(/(?:AUM|assets)[^0-9₹]*₹?\s*([\d,]+(?:\.\d+)?\s*(?:Cr|Crore))/i);
+
+      if (terMatch || navMatch || aumMatch) {
+        metricHtml = '<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">';
+        if (terMatch) {
+          metricHtml += `
+            <div class="p-2.5 rounded bg-surface-container border border-outline-variant/20 flex flex-col">
+              <span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Expense Ratio</span>
+              <span class="font-label-lg text-label-lg font-bold text-on-surface mt-0.5">${terMatch[1]}</span>
+              <span class="font-label-sm text-[9px] text-secondary">Direct (Incl GST)</span>
+            </div>
+          `;
+        }
+        if (navMatch) {
+          metricHtml += `
+            <div class="p-2.5 rounded bg-surface-container border border-outline-variant/20 flex flex-col">
+              <span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Current NAV</span>
+              <span class="font-label-lg text-label-lg font-bold text-primary mt-0.5">₹${navMatch[1]}</span>
+              <span class="font-label-sm text-[9px] text-outline">Official Close</span>
+            </div>
+          `;
+        }
+        if (aumMatch) {
+          metricHtml += `
+            <div class="p-2.5 rounded bg-surface-container border border-outline-variant/20 flex flex-col">
+              <span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Fund AUM</span>
+              <span class="font-label-lg text-label-lg font-bold text-on-surface mt-0.5">₹${aumMatch[1]}</span>
+              <span class="font-label-sm text-[9px] text-outline">Total Assets</span>
+            </div>
+          `;
+        }
+        metricHtml += '</div>';
+      }
+
+      let citationHtml = '';
+      if (sourceUrl) {
+        citationHtml = `
+          <div class="mt-2 p-2.5 rounded bg-surface-container/60 border border-outline-variant/20 flex items-center justify-between flex-wrap gap-2 text-[11px] font-label-md">
+            <div class="flex items-center gap-2 truncate">
+              <span class="material-symbols-outlined text-[15px] text-secondary shrink-0">link</span>
+              <span class="text-outline truncate">Source: <span class="text-on-surface underline">${escapeHtml(sourceUrl)}</span></span>
+              <span class="px-1.5 py-0.2 rounded bg-secondary/10 text-secondary text-[10px] font-label-sm">Fetched &amp; Verified</span>
+            </div>
+            <a class="text-primary hover:underline flex items-center gap-1 font-label-sm" href="${escapeHtml(sourceUrl)}" rel="noopener noreferrer" target="_blank">
+              Direct Filing Link [Open ↗]
+            </a>
+          </div>
+        `;
+      }
+
+      el.innerHTML = `
+        <div class="w-8 h-8 rounded bg-primary-container border border-primary/40 flex items-center justify-center shrink-0 text-on-primary-container shadow-sm">
+          <span class="material-symbols-outlined text-[18px]">account_balance</span>
+        </div>
+        <div class="flex-1 flex flex-col gap-3 max-w-3xl">
+          <div class="p-4 sm:p-5 rounded-lg bg-surface-container-low border border-outline-variant/30 border-l-4 border-l-primary-container flex flex-col gap-3 shadow-lg">
+            <div class="flex items-center justify-between flex-wrap gap-2">
+              <div class="flex items-center gap-2">
+                <span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-secondary/10 text-secondary border border-secondary/30 flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[13px]">verified</span>
+                  <span>VERIFIED FACTUAL</span>
+                </span>
+                <span class="font-label-sm text-label-sm text-outline">HDFC Mutual Fund Scheme</span>
+              </div>
+              <span class="font-label-sm text-label-sm text-outline">Groww Scheme Feed: Verified</span>
+            </div>
+            <div class="font-body-md text-body-md text-on-surface leading-relaxed">${formatMarkdown(cleanText)}</div>
+            ${metricHtml}
+            ${citationHtml}
+          </div>
+        </div>
+      `;
+      return el;
+    }
+
+    async function handleFormSubmit(e) {
+      if (e) e.preventDefault();
+      const input = document.getElementById('query-input');
+      const query = input.value.trim();
+      if (!query) return;
+
+      input.value = '';
+      const chatHistory = document.getElementById('chat-history');
+      document.getElementById('welcome-section').classList.add('hidden');
+
+      chatHistory.appendChild(renderUserCard(query, new Date().toISOString()));
+
+      // Loading card
+      const loadingEl = document.createElement('div');
+      loadingEl.className = "flex justify-start items-center gap-3 p-4 text-outline font-label-sm text-xs";
+      loadingEl.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-secondary animate-ping"></span> <span>Retrieving verified facts & generating response...</span>`;
+      chatHistory.appendChild(loadingEl);
+      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ query: query, thread_id: currentThreadId })
+        });
+        const data = await res.json();
+        loadingEl.remove();
+
+        if (data.thread_id) {
+          currentThreadId = data.thread_id;
+        }
+
+        chatHistory.appendChild(renderAssistantCard(data.response, data.source_url));
+        loadThreads();
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      } catch (err) {
+        loadingEl.remove();
+        console.error('Chat error:', err);
+      }
+    }
+
+    function selectStarter(q) {
+      document.getElementById('query-input').value = q;
+      handleFormSubmit();
+    }
+
+    document.getElementById('btn-new-query').addEventListener('click', createNewThread);
+    document.getElementById('btn-new-session').addEventListener('click', createNewThread);
+
+    // Initial load
+    window.addEventListener('DOMContentLoaded', loadThreads);
+  </script>
+</body>
+</html>
