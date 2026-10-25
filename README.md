@@ -81,6 +81,28 @@ It strictly adheres to:
    python scripts/smoke_test.py
    ```
 
+### Running the Application
+
+1. **Populate Vector Store (Ingestion):**
+   ```bash
+   python scripts/ingest.py
+   ```
+
+2. **Start FastAPI Backend (Port 8000):**
+   ```bash
+   uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
+   ```
+
+3. **Start Streamlit Frontend (Port 8501):**
+   ```bash
+   streamlit run frontend/streamlit_app.py --server.port 8501
+   ```
+
+4. **Run Pytest Test Suite:**
+   ```bash
+   pytest tests -v
+   ```
+
 ---
 
 ## 5. Project Structure
@@ -124,14 +146,14 @@ Milestone2/
 
 ## 6. Implementation Status
 
-- [x] **Phase 0:** Project Bootstrap, Environment Setup, Groq & Selenium Integration (Verified)
-- [ ] **Phase 1:** Data Ingestion Pipeline (Groww Scraper & Indexer)
-- [ ] **Phase 2:** Core RAG Engine (Retriever & LLM Generator)
-- [ ] **Phase 3:** Safety & Guardrails Layer (PII Scanner & Refusal Handling)
-- [ ] **Phase 4:** Multi-Thread Chat Management (SQLite CRUD)
-- [ ] **Phase 5:** Frontend UI (Streamlit) & FastAPI Endpoints
-- [ ] **Phase 6:** End-to-End Integration & Edge Case Testing
-- [ ] **Phase 7:** Documentation & Release
+- [x] **Phase 0:** Project Bootstrap, Environment Setup, Groq & Selenium Integration (Completed & Verified)
+- [x] **Phase 1:** Data Ingestion Pipeline (Groww Scraper, Recursive Chunker & Hybrid Indexer) (Completed)
+- [x] **Phase 2:** Core RAG Engine (Scheme-Aware Retriever, Groq Generator & Sentence Formatter) (Completed)
+- [x] **Phase 3:** Safety & Guardrails Layer (PII Scanner, 2-Layer Classifier & Refusal Handling) (Completed)
+- [x] **Phase 4:** Multi-Thread Chat Management (SQLite Store with Thread Isolation & Cascading) (Completed)
+- [x] **Phase 5:** Frontend UI (Streamlit Multi-Thread App) & FastAPI REST Endpoints (Completed)
+- [x] **Phase 6:** End-to-End Integration & Edge Case Test Suite (42/42 Tests Passing) (Completed)
+- [x] **Phase 7:** Documentation & Release Readiness (Completed)
 
 ---
 

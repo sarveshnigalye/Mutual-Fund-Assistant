@@ -95,12 +95,13 @@ class VectorIndexer:
         q_tokens = tokenize_text(query)
         bm25_scores = np.array(self.embedder.bm25.get_scores(q_tokens)) if self.embedder.bm25 else np.zeros(len(self.chunks))
 
-        # Normalize BM25 scores to [0, 1]
+        # Normalize BM25 scores using expected reference scale (min denominator 10.0)
         bm25_max = np.max(bm25_scores) if len(bm25_scores) > 0 and np.max(bm25_scores) > 0 else 1.0
-        norm_bm25 = bm25_scores / bm25_max
+        norm_scale = max(bm25_max, 10.0)
+        norm_bm25 = np.where(cos_sims > 0, bm25_scores / norm_scale, 0.0)
 
-        # 3. Hybrid scoring (60% vector cosine similarity + 40% BM25 lexical match)
-        hybrid_scores = 0.6 * cos_sims + 0.4 * norm_bm25
+        # 3. Hybrid scoring (70% vector cosine similarity + 30% BM25 lexical match)
+        hybrid_scores = 0.7 * cos_sims + 0.3 * norm_bm25
 
         # 4. Rank candidates
         ranked_indices = np.argsort(hybrid_scores)[::-1]
@@ -110,7 +111,8 @@ class VectorIndexer:
             score = float(hybrid_scores[idx])
             cos_score = float(cos_sims[idx])
 
-            if score < similarity_threshold and cos_score < similarity_threshold:
+            # Filter candidates that don't meet threshold
+            if score < similarity_threshold or cos_score < 0.10:
                 continue
 
             chunk = self.chunks[idx]

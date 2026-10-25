@@ -28,7 +28,7 @@ class Settings(BaseSettings):
 
     # Retrieval
     retrieval_top_k: int = Field(default=5, validation_alias="RETRIEVAL_TOP_K")
-    retrieval_similarity_threshold: float = Field(default=0.65, validation_alias="RETRIEVAL_SIMILARITY_THRESHOLD")
+    retrieval_similarity_threshold: float = Field(default=0.35, validation_alias="RETRIEVAL_SIMILARITY_THRESHOLD")
 
     # Chat Database
     chat_db_path: str = Field(default="./data/chat.db", validation_alias="CHAT_DB_PATH")
