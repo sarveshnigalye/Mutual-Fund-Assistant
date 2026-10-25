@@ -1,0 +1,7 @@
+{
+  "ADVISORY": "I'm a facts-only assistant and cannot provide investment advice or recommendations. For investment guidance, consider consulting a SEBI-registered financial advisor. Learn more: https://investor.sebi.gov.in/",
+  "COMPARATIVE": "I can only share factual details about individual schemes and cannot compare funds or suggest which is better. You can review each scheme's details on the HDFC AMC website: https://www.hdfcfund.com",
+  "PII_DETECTED": "⚠️ Please do not share personal information such as PAN, Aadhaar, account numbers, or contact details. I do not collect or process personal data. For account-related queries, visit: https://www.hdfcfund.com/investor-services",
+  "PERFORMANCE": "I cannot provide return calculations or performance comparisons. For official performance data, please refer to the scheme page: {factsheet_link}",
+  "OUT_OF_SCOPE": "This question is outside my scope. I can only answer factual questions about HDFC Mutual Fund schemes. To learn about mutual funds, visit: https://www.amfiindia.com/investor-corner/knowledge-center"
+}

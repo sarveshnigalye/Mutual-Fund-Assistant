@@ -1,0 +1,42 @@
+[
+  {
+    "id": "hdfc-mid-cap",
+    "scheme_name": "HDFC Mid-Cap Opportunities Fund",
+    "category": "Mid Cap Fund",
+    "url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+    "type": "groww",
+    "amc": "HDFC Mutual Fund"
+  },
+  {
+    "id": "hdfc-small-cap",
+    "scheme_name": "HDFC Small Cap Fund",
+    "category": "Small Cap Fund",
+    "url": "https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth",
+    "type": "groww",
+    "amc": "HDFC Mutual Fund"
+  },
+  {
+    "id": "hdfc-large-cap",
+    "scheme_name": "HDFC Large Cap / Top 100 Fund",
+    "category": "Large Cap Fund",
+    "url": "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+    "type": "groww",
+    "amc": "HDFC Mutual Fund"
+  },
+  {
+    "id": "hdfc-silver-etf-fof",
+    "scheme_name": "HDFC Silver ETF Fund of Fund (FoF)",
+    "category": "Commodities / FoF",
+    "url": "https://groww.in/mutual-funds/hdfc-silver-etf-fof-direct-growth",
+    "type": "groww",
+    "amc": "HDFC Mutual Fund"
+  },
+  {
+    "id": "hdfc-multi-cap",
+    "scheme_name": "HDFC Multi Cap Fund",
+    "category": "Multi Cap Fund",
+    "url": "https://groww.in/mutual-funds/hdfc-multi-cap-fund-direct-growth",
+    "type": "groww",
+    "amc": "HDFC Mutual Fund"
+  }
+]
