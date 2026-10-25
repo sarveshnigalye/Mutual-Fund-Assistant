@@ -6,6 +6,8 @@ import html
 import logging
 import os
 import re
+import socket
+import textwrap
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 import requests
@@ -29,6 +31,50 @@ try:
     HAS_LOCAL_BACKEND = True
 except Exception:
     HAS_LOCAL_BACKEND = False
+
+
+def is_backend_alive(host: str = "127.0.0.1", port: int = 8000) -> bool:
+    """Fast TCP probe to verify if FastAPI server is up in < 80ms."""
+    try:
+        with socket.create_connection((host, port), timeout=0.08):
+            return True
+    except OSError:
+        return False
+
+
+def api_request(method: str, endpoint: str, json_data=None):
+    """Makes HTTP request to FastAPI backend with instant fallback."""
+    if not is_backend_alive() and HAS_LOCAL_BACKEND:
+        return local_fallback_request(method, endpoint, json_data)
+
+    url = f"{API_URL}/{endpoint.lstrip('/')}"
+    try:
+        timeout = (0.5, 30.0 if method.upper() == "POST" else 2.0)
+        if method.upper() == "GET":
+            resp = requests.get(url, timeout=timeout)
+        elif method.upper() == "POST":
+            resp = requests.post(url, json=json_data, timeout=timeout)
+        elif method.upper() == "DELETE":
+            resp = requests.delete(url, timeout=timeout)
+        elif method.upper() == "PATCH":
+            resp = requests.patch(url, json=json_data, timeout=timeout)
+        else:
+            raise ValueError(f"Unsupported method: {method}")
+
+        if resp.status_code in [200, 201]:
+            return resp.json()
+    except Exception:
+        if HAS_LOCAL_BACKEND:
+            return local_fallback_request(method, endpoint, json_data)
+    return None
+
+
+def render_html(html_str: str):
+    """Safely renders HTML without Markdown 4-space code block distortion or comment leaks."""
+    dedented = textwrap.dedent(html_str).strip()
+    cleaned = re.sub(r'<!--.*?-->', '', dedented, flags=re.DOTALL).strip()
+    st.markdown(cleaned, unsafe_allow_html=True)
+
 
 # Verified Schemes in Corpus
 VERIFIED_SCHEMES = [
@@ -62,13 +108,11 @@ QUICK_STARTER_QUERIES = [
 ]
 
 # Obsidian Factstream Theme Styling
-st.markdown(
+render_html(
     """
     <style>
-    /* Google Fonts */
     @import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
 
-    /* Global Colors & Reset */
     :root {
         --color-surface: #0B1326;
         --color-surface-lowest: #060E20;
@@ -83,25 +127,21 @@ st.markdown(
         --color-tertiary: #F59E0B;
     }
 
-    /* Base Typography & Background */
     html, body, [class*="css"], .stApp {
         font-family: 'Inter', sans-serif !important;
         background-color: #0B1326 !important;
         color: #DAE2FD !important;
     }
 
-    /* Sidebar Background & Borders */
     [data-testid="stSidebar"] {
         background-color: #060E20 !important;
         border-right: 1px solid rgba(255, 255, 255, 0.08) !important;
     }
 
-    /* Header adjustments */
     header[data-testid="stHeader"] {
         background-color: #0B1326 !important;
     }
 
-    /* Buttons Styling */
     .stButton > button {
         background-color: #171F33 !important;
         color: #DAE2FD !important;
@@ -119,7 +159,6 @@ st.markdown(
         color: #B4C5FF !important;
     }
 
-    /* Primary Buttons (New Query / Active selection) */
     .stButton > button[kind="primary"] {
         background: linear-gradient(90deg, #2563EB 0%, #1D4ED8 100%) !important;
         color: #FFFFFF !important;
@@ -133,7 +172,6 @@ st.markdown(
         box-shadow: 0 4px 14px rgba(37, 99, 235, 0.5) !important;
     }
 
-    /* Bottom Input Container */
     [data-testid="stBottom"] {
         background-color: rgba(11, 19, 38, 0.95) !important;
         backdrop-filter: blur(12px) !important;
@@ -157,25 +195,6 @@ st.markdown(
         font-size: 14px !important;
     }
 
-    /* Card styling utility classes */
-    .obsidian-card {
-        background-color: #131B2E;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 6px;
-        padding: 1rem 1.15rem;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
-        margin-bottom: 1rem;
-    }
-
-    .obsidian-user-card {
-        background-color: #222A3D;
-        border: 1px solid rgba(255, 255, 255, 0.08);
-        border-radius: 6px;
-        padding: 0.85rem 1rem;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-        margin-bottom: 1rem;
-    }
-
     .bento-card {
         background-color: #171F33;
         border: 1px solid rgba(255, 255, 255, 0.08);
@@ -187,55 +206,14 @@ st.markdown(
         justify-content: space-between;
     }
     </style>
-    """,
-    unsafe_allow_html=True,
+    """
 )
-
 
 # Session State Initialization
 if "current_thread_id" not in st.session_state:
     st.session_state.current_thread_id = None
 if "pending_query" not in st.session_state:
     st.session_state.pending_query = None
-if "backend_reachable" not in st.session_state:
-    try:
-        r = requests.get(f"{API_URL}/health", timeout=(0.3, 0.5))
-        st.session_state.backend_reachable = (r.status_code == 200)
-    except Exception:
-        st.session_state.backend_reachable = False
-
-
-def api_request(method: str, endpoint: str, json_data=None):
-    """Makes HTTP request to FastAPI backend with immediate in-process fallback."""
-    # Fast path: If backend is known unreachable and local backend is available, bypass HTTP
-    if not st.session_state.get("backend_reachable", True) and HAS_LOCAL_BACKEND:
-        return local_fallback_request(method, endpoint, json_data)
-
-    url = f"{API_URL}/{endpoint.lstrip('/')}"
-    try:
-        connect_timeout = 0.4
-        read_timeout = 30.0 if method.upper() == "POST" else 2.0
-        timeout = (connect_timeout, read_timeout)
-
-        if method.upper() == "GET":
-            resp = requests.get(url, timeout=timeout)
-        elif method.upper() == "POST":
-            resp = requests.post(url, json=json_data, timeout=timeout)
-        elif method.upper() == "DELETE":
-            resp = requests.delete(url, timeout=timeout)
-        elif method.upper() == "PATCH":
-            resp = requests.patch(url, json=json_data, timeout=timeout)
-        else:
-            raise ValueError(f"Unsupported method: {method}")
-
-        if resp.status_code in [200, 201]:
-            st.session_state.backend_reachable = True
-            return resp.json()
-    except Exception:
-        st.session_state.backend_reachable = False
-        if HAS_LOCAL_BACKEND:
-            return local_fallback_request(method, endpoint, json_data)
-    return None
 
 
 def local_fallback_request(method: str, endpoint: str, json_data=None):
@@ -284,17 +262,13 @@ def local_fallback_request(method: str, endpoint: str, json_data=None):
 def format_markdown_body(text: str) -> str:
     """Safely converts common markdown syntax (bold, backticks, breaks) to HTML."""
     safe = html.escape(text)
-    # Bold: **text** -> <strong>text</strong>
     safe = re.sub(r'\*\*(.+?)\*\*', r'<strong>\1</strong>', safe)
-    # Italic: *text* or _text_ -> <em>text</em>
     safe = re.sub(r'(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)', r'<em>\1</em>', safe)
-    # Code inline: `code`
     safe = re.sub(
         r'`(.+?)`',
         r'<code style="font-family: \'JetBrains Mono\', monospace; background: rgba(255,255,255,0.06); padding: 1px 4px; border-radius: 3px; font-size: 12px; color: #B4C5FF;">\1</code>',
         safe,
     )
-    # Newlines
     safe = safe.replace("\n\n", "<br><br>").replace("\n", "<br>")
     return safe
 
@@ -320,7 +294,6 @@ def parse_assistant_message(content: str, default_source: Optional[str] = None) 
         source_url = src_match.group(1)
         text = text.replace(src_match.group(0), "")
 
-    # Also clean markdown link format [Source](url) or 📎 Source: url
     src_link_match = re.search(r'(?:📎\s*)?Source:\s*(https?://[^\s\n\)]+)', text)
     if src_link_match:
         if not source_url:
@@ -333,7 +306,6 @@ def parse_assistant_message(content: str, default_source: Optional[str] = None) 
         scrape_date = date_match.group(1)
         text = text.replace(date_match.group(0), "")
 
-    # Also clean "_Last updated from sources: 2026-10-25_"
     date_note_match = re.search(r'_Last updated from sources:\s*([^\s_]+)_', text)
     if date_note_match:
         scrape_date = date_note_match.group(1)
@@ -341,7 +313,6 @@ def parse_assistant_message(content: str, default_source: Optional[str] = None) 
 
     clean_body = text.strip()
 
-    # Detect relevant scheme
     scheme_name = "HDFC Mutual Fund Scheme"
     body_lower = clean_body.lower()
     for full_name, kws in VERIFIED_SCHEMES:
@@ -349,9 +320,7 @@ def parse_assistant_message(content: str, default_source: Optional[str] = None) 
             scheme_name = full_name
             break
 
-    # Extract structured metrics
     metrics = []
-
     ter_m = re.search(r'(?:Expense Ratio|TER)[^0-9]*(\d+(?:\.\d+)?\s*%)', clean_body, re.IGNORECASE)
     if ter_m:
         metrics.append({"label": "EXPENSE RATIO", "value": ter_m.group(1).strip(), "sub": "Direct (Incl GST)"})
@@ -382,7 +351,6 @@ def parse_assistant_message(content: str, default_source: Optional[str] = None) 
     }
 
 
-
 def switch_thread(thread_id: str):
     st.session_state.current_thread_id = thread_id
     st.rerun()
@@ -399,13 +367,11 @@ def create_new_thread():
 # SIDEBAR NAVIGATION RAIL
 # ==============================================================================
 with st.sidebar:
-    # 1. Primary Action: + New Query
     if st.button("➕ New Query", use_container_width=True, type="primary"):
         create_new_thread()
 
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
 
-    # 2. Section Header: CONVERSATIONS & Count Badge
     threads_data = api_request("GET", "threads") or []
     if not threads_data:
         init_thread = api_request("POST", "threads", {"title": "New Chat"})
@@ -417,7 +383,7 @@ with st.sidebar:
     if st.session_state.current_thread_id not in thread_ids and thread_ids:
         st.session_state.current_thread_id = thread_ids[0]
 
-    st.markdown(
+    render_html(
         f"""
         <div style="display: flex; justify-content: space-between; align-items: center; padding: 0 4px; margin-bottom: 8px;">
             <span style="font-family: 'JetBrains Mono', monospace; font-size: 11px; font-weight: 600; color: #64748B; letter-spacing: 0.05em; text-transform: uppercase;">
@@ -427,11 +393,9 @@ with st.sidebar:
                 {len(threads_data)} ACTIVE
             </span>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    # 3. Thread List (Limiting display to most recent 12 threads for clean UI)
     for t in threads_data[:12]:
         t_id = t["thread_id"]
         t_title = t.get("title", "New Chat")
@@ -450,8 +414,7 @@ with st.sidebar:
                     st.session_state.current_thread_id = None
                 st.rerun()
 
-    # 4. Scheme Coverage Metric Box (5 Verified Schemes)
-    st.markdown(
+    render_html(
         """
         <div style="margin-top: 1.5rem; padding: 0.85rem; border-radius: 6px; background-color: #171F33; border: 1px solid rgba(255, 255, 255, 0.08);">
             <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.6rem; padding-bottom: 0.4rem; border-bottom: 1px solid rgba(255, 255, 255, 0.06);">
@@ -483,11 +446,9 @@ with st.sidebar:
                 </div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    # 5. Statutory Disclosures Drawer
     st.markdown("<div style='height: 8px;'></div>", unsafe_allow_html=True)
     with st.expander("⚖️ Statutory Disclosures", expanded=False):
         st.caption(
@@ -500,12 +461,10 @@ with st.sidebar:
 # ==============================================================================
 # MAIN VIEW: TOP HEADER & MANDATORY REGULATORY BANNER
 # ==============================================================================
-st.markdown(
+render_html(
     """
     <div style="display: flex; flex-direction: column; width: 100%; margin-bottom: 1.25rem;">
-        <!-- Top Application Header Bar -->
         <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.75rem; padding: 0.75rem 1rem; background-color: #131B2E; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px;">
-            <!-- Brand Identity -->
             <div style="display: flex; align-items: center; gap: 0.75rem;">
                 <div style="width: 32px; height: 32px; border-radius: 4px; background-color: #2563EB; display: flex; align-items: center; justify-content: center; color: #FFFFFF; font-size: 18px;">
                     🏦
@@ -522,7 +481,6 @@ st.markdown(
                 </div>
             </div>
 
-            <!-- Grounding & Engine Status Indicators -->
             <div style="display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;">
                 <div style="display: flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 4px; background-color: #171F33; border: 1px solid rgba(255,255,255,0.08); font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #10B981;">
                     <span style="width: 7px; height: 7px; border-radius: 50%; background-color: #10B981; display: inline-block;"></span>
@@ -534,7 +492,6 @@ st.markdown(
             </div>
         </div>
 
-        <!-- Mandatory Regulatory Disclaimer Banner -->
         <div style="display: flex; justify-content: space-between; align-items: center; background-color: rgba(245, 158, 11, 0.08); border: 1px solid rgba(245, 158, 11, 0.25); border-left: 3px solid #F59E0B; padding: 0.5rem 0.85rem; border-radius: 4px; margin-top: 0.5rem; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #F59E0B;">
             <div style="display: flex; align-items: center; gap: 0.5rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
                 <span>⚠️</span>
@@ -547,10 +504,8 @@ st.markdown(
             </span>
         </div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
-
 
 # Fetch messages for current active thread
 current_thread = None
@@ -562,10 +517,10 @@ if st.session_state.current_thread_id:
 
 
 # ==============================================================================
-# WELCOME HERO & QUICK STARTER BENTO GRID (When Thread Has No Messages)
+# WELCOME HERO & QUICK STARTER BENTO GRID
 # ==============================================================================
 if not messages:
-    st.markdown(
+    render_html(
         """
         <div style="margin-top: 0.5rem; margin-bottom: 1.5rem; display: flex; flex-direction: column; gap: 0.5rem;">
             <div style="display: flex; align-items: center; gap: 0.5rem;">
@@ -581,11 +536,9 @@ if not messages:
                 Strictly grounded in official Groww scheme data. Brevity guaranteed (≤ 3 sentences). Zero personal opinion, recommendation, or return guarantees.
             </p>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
-    # Bento Grid Quick Starters (3 Cards with explicit Run Query buttons)
     starter_cols = st.columns(3)
     for idx, item in enumerate(QUICK_STARTER_QUERIES):
         with starter_cols[idx]:
@@ -603,13 +556,12 @@ if not messages:
                 <div style="font-family: 'JetBrains Mono', monospace; font-size: 10px; color: #64748B; margin-top: 0.5rem;">{item['desc']}</div>
             </div>
             """
-            st.markdown(card_html, unsafe_allow_html=True)
+            render_html(card_html)
             if st.button("Run Query ↗", key=f"bento_run_{idx}", use_container_width=True):
                 st.session_state.pending_query = item["query"]
                 st.rerun()
 
-    # Verified Dataset Comparison Snapshot (Bento Inspection Grid)
-    st.markdown(
+    render_html(
         """
         <div style="margin-top: 2rem; padding-top: 1.25rem; border-top: 1px solid rgba(255, 255, 255, 0.08); display: flex; flex-direction: column; gap: 0.75rem;">
             <div style="display: flex; justify-content: space-between; align-items: center;">
@@ -655,8 +607,7 @@ if not messages:
                 </div>
             </div>
         </div>
-        """,
-        unsafe_allow_html=True,
+        """
     )
 
 
@@ -676,7 +627,7 @@ def render_user_message(query: str, created_at: str = ""):
     safe_query = format_markdown_body(query)
     user_html = f"""
     <div style="display: flex; justify-content: flex-end; align-items: flex-start; gap: 0.75rem; margin-bottom: 1.25rem; padding-left: 2rem;">
-        <div class="obsidian-user-card" style="max-width: 80%;">
+        <div style="background-color: #222A3D; border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 6px; padding: 0.85rem 1rem; max-width: 80%; box-shadow: 0 2px 8px rgba(0,0,0,0.3);">
             <p style="font-family: 'Inter', sans-serif; font-size: 14px; color: #DAE2FD; margin: 0; line-height: 1.5;">
                 {safe_query}
             </p>
@@ -689,7 +640,7 @@ def render_user_message(query: str, created_at: str = ""):
         </div>
     </div>
     """
-    st.markdown(user_html, unsafe_allow_html=True)
+    render_html(user_html)
 
 
 def render_assistant_message(content: str, source_url: Optional[str] = None):
@@ -788,7 +739,7 @@ def render_assistant_message(content: str, source_url: Optional[str] = None):
         </div>
         """
 
-    st.markdown(card_html, unsafe_allow_html=True)
+    render_html(card_html)
 
 
 # Render existing thread conversation history
@@ -817,10 +768,8 @@ elif user_input:
     query_to_send = user_input.strip()
 
 if query_to_send:
-    # 1. Render user message optimistically
     render_user_message(query_to_send)
 
-    # 2. Call backend with spinner
     with st.spinner("Retrieving verified facts & generating response..."):
         payload = {
             "query": query_to_send,
@@ -839,8 +788,7 @@ if query_to_send:
     st.rerun()
 
 
-# Telemetry and Micro Disclaimer Bar
-st.markdown(
+render_html(
     """
     <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem; padding: 0.4rem 0.2rem 0 0.2rem; font-family: 'JetBrains Mono', monospace; font-size: 11px; color: #64748B;">
         <div style="display: flex; align-items: center; gap: 0.6rem;">
@@ -857,6 +805,5 @@ st.markdown(
             Data cross-referenced with SEBI filings & Groww data feeds. Never constitutes financial advice.
         </div>
     </div>
-    """,
-    unsafe_allow_html=True,
+    """
 )
