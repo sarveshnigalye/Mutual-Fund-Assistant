@@ -79,6 +79,16 @@ def root():
     }
 
 
+@app.get("/health", tags=["Health"])
+def health_check():
+    return {
+        "status": "ok",
+        "service": "HDFC Mutual Fund FAQ Assistant API",
+        "version": "1.0.0",
+        "disclaimer": "Facts-only, non-advisory assistant.",
+    }
+
+
 if __name__ == "__main__":
     import uvicorn
 

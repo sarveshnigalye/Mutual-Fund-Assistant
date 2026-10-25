@@ -7,7 +7,7 @@ import sys
 def main():
     frontend_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "frontend", "streamlit_app.py"))
     python_exe = sys.executable
-    cmd = [python_exe, "-m", "streamlit", "run", frontend_path, "--server.port", "8501"]
+    cmd = [python_exe, "-m", "streamlit", "run", frontend_path, "--server.port", "8501", "--server.headless", "true"]
     print(f"🌐 Launching Streamlit frontend on http://localhost:8501...")
     subprocess.run(cmd)
 
