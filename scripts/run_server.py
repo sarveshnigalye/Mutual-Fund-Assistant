@@ -10,3 +10,4 @@ from app.config import settings
 if __name__ == "__main__":
     print(f"🚀 Launching FastAPI server on http://{settings.api_host}:{settings.api_port}...")
     uvicorn.run("app.main:app", host=settings.api_host, port=settings.api_port, reload=True)
+
