@@ -17,6 +17,7 @@ __pycache__/
 
 # Data and database storage
 data/vectorstore/
+data/chroma/
 data/chat.db
 data/raw/
 
