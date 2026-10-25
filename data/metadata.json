@@ -1,0 +1,21 @@
+{
+  "total_chunks": 474,
+  "total_schemes": 5,
+  "schemes": [
+    "HDFC Silver ETF Fund of Fund (FoF)",
+    "HDFC Small Cap Fund",
+    "HDFC Large Cap / Top 100 Fund",
+    "HDFC Multi Cap Fund",
+    "HDFC Mid-Cap Opportunities Fund"
+  ],
+  "source_urls": [
+    "https://groww.in/mutual-funds/hdfc-silver-etf-fof-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-multi-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth"
+  ],
+  "scrape_date": "2026-10-25",
+  "embedding_type": "tfidf_bm25_hybrid",
+  "corpus_path": "data/vectorstore\\corpus.json"
+}

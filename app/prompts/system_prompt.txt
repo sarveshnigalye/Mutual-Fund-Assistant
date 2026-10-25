@@ -17,3 +17,4 @@ CONTEXT (Retrieved from official sources):
 USER QUERY: {user_query}
 
 ASSISTANT:
+
