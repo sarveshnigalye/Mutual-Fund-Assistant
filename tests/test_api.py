@@ -67,3 +67,4 @@ def test_chat_endpoint_advisory_refusal():
 def test_chat_endpoint_empty_query():
     res = client.post("/api/chat", json={"query": "   "})
     assert res.status_code == 400
+

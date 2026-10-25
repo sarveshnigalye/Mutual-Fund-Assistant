@@ -1,6 +1,7 @@
-"""Unit tests for the response formatter."""
+"""Unit tests for the response formatter covering all edge cases."""
 
-from app.core.formatter import format_response, split_sentences, clean_llm_output
+import pytest
+from app.core.formatter import clean_llm_output, format_response, split_sentences
 
 
 def test_clean_llm_output():
@@ -18,21 +19,49 @@ def test_split_sentences_with_decimals_and_abbr():
     assert "0.60%" in sentences[1]
 
 
-def test_format_response_caps_at_three_sentences():
+def test_formatter_edge_case_zero_sentences():
+    # 0 sentences / empty string
+    formatted = format_response(
+        raw_response="   \n\t  ",
+        source_url="https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+        scrape_date="2026-10-25",
+    )
+    assert "I don't have verified information on this" in formatted
+    assert "https://www.hdfcfund.com" in formatted
+    assert "_Last updated from sources: 2026-10-25_" in formatted
+
+
+def test_formatter_edge_case_many_sentences_capped_at_three():
+    # 7 sentences should be capped strictly at 3
     raw = (
-        "Sentence one. Sentence two. Sentence three. "
-        "Sentence four should be omitted. Sentence five also omitted."
+        "First sentence states the expense ratio. Second sentence explains exit load. "
+        "Third sentence details the benchmark. Fourth sentence should be dropped. "
+        "Fifth sentence dropped. Sixth sentence dropped. Seventh sentence dropped."
     )
     formatted = format_response(
         raw_response=raw,
         source_url="https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
         scrape_date="2026-10-25",
     )
-    assert "Sentence one." in formatted
-    assert "Sentence two." in formatted
-    assert "Sentence three." in formatted
-    assert "Sentence four" not in formatted
+    assert "First sentence states the expense ratio." in formatted
+    assert "Second sentence explains exit load." in formatted
+    assert "Third sentence details the benchmark." in formatted
+    assert "Fourth sentence" not in formatted
+    assert "Fifth sentence" not in formatted
     assert "📎 Source: https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth" in formatted
+    assert "_Last updated from sources: 2026-10-25_" in formatted
+
+
+def test_formatter_edge_case_missing_url():
+    # When source_url is empty, no "📎 Source:" line should be added
+    raw = "The minimum SIP amount for HDFC Top 100 Fund is ₹100."
+    formatted = format_response(
+        raw_response=raw,
+        source_url="",
+        scrape_date="2026-10-25",
+    )
+    assert "The minimum SIP amount for HDFC Top 100 Fund is ₹100." in formatted
+    assert "📎 Source:" not in formatted
     assert "_Last updated from sources: 2026-10-25_" in formatted
 
 

@@ -107,3 +107,4 @@ def test_vector_indexer_search(tmp_path):
     assert results[0]["chunk_id"] == "chunk-001"
     assert results[0]["source_url"] == "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth"
     assert results[0]["similarity_score"] > 0.2
+
