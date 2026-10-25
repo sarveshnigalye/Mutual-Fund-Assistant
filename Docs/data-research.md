@@ -152,19 +152,17 @@ flowchart TD
 
 ### 7.1. Database Options Comparison
 
-| Engine | Storage Model | Memory Footprint | Windows Py3.15 Compatibility | Zero-Daemon? | ACID Support |
-| :--- | :--- | :---: | :---: | :---: | :---: |
-| **ChromaDB** | HNSW + DuckDB/SQLite | ~150 MB | Requires C++ 14.0 build tools | Yes (embedded) | No |
-| **Persistent In-Memory (Joblib)** | Scipy CSR Matrix + JSON | **~5 MB** | **100% Native** | **Yes (in-process)** | File-based |
-| **SQLite FTS5 + BLOB Vectors** | SQLite table + FTS5 | **~8 MB** | **100% Native** | **Yes (in-process)** | **Full ACID** |
-| **FAISS-CPU** | HNSW / Flat Index | ~40 MB | Requires Conda or wheels | Yes | No |
+| Engine | Storage Model | Memory / Footprint | Windows Py3.15 Compatibility | Zero-Daemon? | ACID Support | Supported in Phase 3? |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: |
+| **Pinecone** | Cloud Managed Serverless | 0 MB (Cloud) | **100% Native Pre-built Wheels** | Cloud API | Yes (Cloud) | **Yes (Cloud Option)** |
+| **ChromaDB** | Embedded HNSW + SQLite | ~150 MB | Native in Docker / Python ≤3.12 (Requires C++ 14.0 on raw Py3.15) | Yes (embedded) | No | **Yes (Local Option)** |
+| **Persistent In-Memory (Joblib)** | Scipy CSR Matrix + BM25 | **~1.3 MB** | **100% Native Pre-built Wheels** | **Yes (in-process)** | File-based | **Yes (Fallback Option)** |
+| **SQLite FTS5 + BLOB Vectors** | SQLite table + FTS5 | **~8 MB** | **100% Native Standard Library** | **Yes (in-process)** | **Full ACID** | **Yes (Catalog & Chat DB)** |
 
 ### 7.2. Recommended Vector Database Decision
-- **Primary / Current Engine:** **In-Memory Serialized Vector Store (`joblib` + `scipy` / `numpy`)**.
-  - Total corpus is ~70 chunks (~150 KB serialized).
-  - Search latency is **< 1 ms**.
-  - Zero external daemons, zero C++ compilation dependencies on Windows.
-- **Production Evolution (Phase 3 Integration):** Unify SQLite database so both chat history (`messages`, `threads`) and chunk catalog (`chunks`, `fts_chunks`) live in `data/chat.db`, ensuring single-file backup, full transactional ACID integrity, and lightning-fast FTS5 BM25 search.
+- **Cloud Managed Option:** **Pinecone** (`pinecone` SDK) for team/serverless environments with zero local build issues on Windows Python 3.15.
+- **Local Standalone Option:** **ChromaDB** for local setups where C++ 14.0 build tools or Docker are available.
+- **Embedded Local Fallback:** **Persistent In-Memory Hybrid Store (`joblib` + `scipy` / `numpy`)** providing sub-millisecond (<0.5 ms) exact financial parameter retrieval without external dependencies.
 
 ---
 
@@ -173,3 +171,4 @@ flowchart TD
 1. **Update Chunker:** Implement `AtomicSectionChunker` extracting the 8 discrete FAQs, 1 Key Facts card, and holdings summary per scheme.
 2. **Refine Indexer:** Apply section boosting and hybrid scoring formula ($\alpha = 0.70, 1 - \alpha = 0.30$).
 3. **Update Documentation:** Reflect the data research metrics and revised architecture in [`Docs/implementation-plan.md`](file:///f:/AI%20projects/Milestone2/Docs/implementation-plan.md).
+

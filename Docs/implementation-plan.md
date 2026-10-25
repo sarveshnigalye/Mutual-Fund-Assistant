@@ -260,17 +260,50 @@ $$\text{FinalScore}(q, d) = \alpha \cdot \text{VectorCosineSim}(q, d) + (1 - \al
 
 ---
 
-### 3.4. Proper Vector Database Architecture
+### 3.4. Proper Vector Database Architecture: ChromaDB or Pinecone
 
-| Database Engine | Architecture | Latency | Windows Python 3.15 Compatibility | Storage Footprint | Verdict |
+In Phase 3, the vector database layer supports **ChromaDB** (for local/embedded deployments) and **Pinecone** (for managed cloud serverless deployments), with our zero-dependency serialized hybrid store as a fast local fallback:
+
+| Database Option | Architecture & Type | Latency | Windows Python 3.15 Compatibility | Storage Footprint | Recommended Use Case |
 | :--- | :--- | :---: | :---: | :---: | :--- |
-| **ChromaDB** | HNSW + SQLite/DuckDB | 5–15 ms | Requires C++ 14.0 build tools for `chroma-hnswlib` | ~150 MB | Deferred (Requires C++ compiler) |
-| **Persistent Serialized Vector Store (`joblib` + `scipy`/`numpy`)** | CSR Sparse Matrix + Token Inverted Index | **< 0.5 ms** | **100% Native Pre-built Wheels** | **~1.3 MB** | **Active Primary Engine** |
-| **SQLite FTS5 + BLOB Vectors** | SQLite table + FTS5 index | **< 1.0 ms** | **100% Built-in (Standard Library)** | **~5 MB** | **Enterprise Unified Upgrade** |
+| **Pinecone** | Cloud Managed Serverless Vector DB (`pinecone` SDK) | 20–40 ms (Network) | **100% Native Pre-built Wheels** | Cloud (0 MB local) | **Primary Cloud Choice**: Zero compilation required, serverless scaling, metadata filtering. |
+| **ChromaDB** | Embedded Local Vector DB (HNSW + SQLite) | 5–15 ms | Native in Docker / Python ≤3.12 (Needs MSVC C++ 14.0 on raw Windows Py3.15) | ~150 MB | **Primary Local Choice**: Standalone offline local deployments, no external cloud API dependency. |
+| **Persistent Serialized Hybrid Store** | In-Process Embedded (`joblib` + `scipy`/`numpy`) | **< 0.5 ms** | **100% Native Pre-built Wheels** | **~1.3 MB** | **Zero-Config Fallback**: Instant local execution with exact numerical parameter fidelity. |
+| **SQLite FTS5 + BLOB Vectors** | SQLite table + FTS5 full-text index | **< 1.0 ms** | **100% Built-in (Standard Library)** | **~5 MB** | **Enterprise Unified Upgrade**: ACID-safe catalog storage integrated with chat history. |
 
-**Decision:**
-- Maintain the **Persistent In-Memory Hybrid Store** (`data/vectorstore/*.joblib`) as the primary ultra-fast retrieval engine.
-- Integrate catalog metadata with SQLite (`data/chat.db`) to provide single-file backup, transactional ACID safety, and multi-thread chat isolation.
+#### 1. Pinecone Architecture Details (Cloud Managed)
+- **SDK:** `pinecone` (v10+ with pre-compiled wheels).
+- **Index Name:** `mf-faq-corpus`
+- **Distance Metric:** Cosine similarity (`cosine`).
+- **Embedding Dimensions:** 384 (for `all-MiniLM-L6-v2`) or 768 (for Google `text-embedding-004`).
+- **Metadata Schema:**
+  ```json
+  {
+    "scheme_id": "hdfc-mid-cap",
+    "scheme_name": "HDFC Mid-Cap Opportunities Fund",
+    "section_type": "key_facts",
+    "chunk_id": "hdfc-mid-cap-key-facts",
+    "source_url": "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+    "scrape_date": "2026-10-25"
+  }
+  ```
+- **Metadata Filtering:** Enforces strict scheme isolation during retrieval:
+  `filter={"scheme_id": {"$eq": detected_scheme}}`.
+
+#### 2. ChromaDB Architecture Details (Local Embedded)
+- **Client:** `chromadb.PersistentClient(path="./data/chroma")`.
+- **Collection:** `mf_faq_corpus`.
+- **Distance Function:** `{"hnsw:space": "cosine"}`.
+- **Metadata Filter:** `where={"scheme_id": detected_scheme}`.
+
+#### 3. Config Integration (`app/config.py` & `.env`)
+```ini
+VECTOR_DB_PROVIDER=pinecone     # "pinecone" | "chromadb" | "local"
+PINECONE_API_KEY=<your-pinecone-api-key>
+PINECONE_INDEX_NAME=mf-faq-corpus
+PINECONE_ENVIRONMENT=us-east-1
+CHROMA_DB_PATH=./data/chroma
+```
 
 ---
 

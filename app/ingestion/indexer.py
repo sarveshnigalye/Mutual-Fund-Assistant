@@ -7,14 +7,20 @@ from typing import Any, Dict, List, Optional
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
 
+from app.config import settings
 from app.ingestion.chunker import DocumentChunk
 from app.ingestion.embedder import CorpusEmbedder, tokenize_text
+from app.ingestion.pinecone_store import PineconeVectorStore
+from app.ingestion.chroma_store import ChromaVectorStore
 
 logger = logging.getLogger("ingestion.indexer")
 
 
 class VectorIndexer:
-    """Manages persistent indexing, metadata persistence, and similarity search."""
+    """Manages persistent indexing, metadata persistence, and similarity search.
+
+    Supports Pinecone (cloud), ChromaDB (embedded), and local serialized hybrid store.
+    """
 
     def __init__(self, vectorstore_dir: str = "data/vectorstore"):
         self.vectorstore_dir = vectorstore_dir
@@ -25,6 +31,15 @@ class VectorIndexer:
 
         self.embedder = CorpusEmbedder(vectorstore_dir=self.vectorstore_dir)
         self.chunks: List[Dict[str, Any]] = []
+
+        # Cloud and embedded provider integrations (Phase 3 §3.4)
+        self.provider = settings.vector_db_provider
+        self.pinecone_store = (
+            PineconeVectorStore() if self.provider == "pinecone" else None
+        )
+        self.chroma_store = (
+            ChromaVectorStore() if self.provider == "chromadb" else None
+        )
 
     def index_chunks(self, chunk_objects: List[DocumentChunk]) -> Dict[str, Any]:
         """
@@ -58,6 +73,15 @@ class VectorIndexer:
         with open(self.metadata_path, "w", encoding="utf-8") as f:
             json.dump(catalog, f, indent=2, ensure_ascii=False)
 
+        # 4. Optional cloud / embedded database sync (Pinecone / ChromaDB)
+        if self.pinecone_store and self.pinecone_store.is_ready():
+            dense_vectors = self.embedder.tfidf_matrix.toarray().tolist()
+            self.pinecone_store.upsert_chunks(self.chunks, dense_vectors)
+
+        if self.chroma_store and self.chroma_store.is_ready():
+            dense_vectors = self.embedder.tfidf_matrix.toarray().tolist()
+            self.chroma_store.upsert_chunks(self.chunks, dense_vectors)
+
         logger.info(f"Indexing complete. {len(chunk_objects)} chunks indexed across {len(schemes)} schemes.")
         return catalog
 
@@ -86,6 +110,30 @@ class VectorIndexer:
             if not self.load():
                 logger.error("No indexed corpus found to query.")
                 return []
+
+        # Check if Pinecone cloud provider is active (Phase 3 §3.4)
+        if self.pinecone_store and self.pinecone_store.is_ready():
+            q_dense = self.embedder.transform_query(query).toarray()[0].tolist()
+            pinecone_results = self.pinecone_store.search(
+                query_vector=q_dense,
+                top_k=top_k,
+                scheme_filter=scheme_filter,
+                similarity_threshold=similarity_threshold,
+            )
+            if pinecone_results:
+                return pinecone_results
+
+        # Check if ChromaDB local provider is active (Phase 3 §3.4)
+        if self.chroma_store and self.chroma_store.is_ready():
+            q_dense = self.embedder.transform_query(query).toarray()[0].tolist()
+            chroma_results = self.chroma_store.search(
+                query_embedding=q_dense,
+                top_k=top_k,
+                scheme_filter=scheme_filter,
+                similarity_threshold=similarity_threshold,
+            )
+            if chroma_results:
+                return chroma_results
 
         # 1. Cosine similarity via TF-IDF
         q_vec = self.embedder.transform_query(query)

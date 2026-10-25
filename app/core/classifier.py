@@ -1,4 +1,7 @@
-"""Two-layer query classifier (Layer 1 Heuristics + Layer 2 Groq LLM Zero-shot)."""
+"""Two-layer query classifier (Layer 1 Heuristics + Layer 2 Groq LLM Zero-shot).
+
+Implements Phase 3 Task 3.2 (Keyword Heuristic Classifier) and Task 3.3 (Zero-shot LLM).
+"""
 
 import json
 import logging
@@ -40,18 +43,20 @@ except Exception:
         "OUT_OF_SCOPE": "This question is outside my scope. Learn about mutual funds at: https://www.amfiindia.com/investor-corner/knowledge-center",
     }
 
-# Layer 1 Heuristics Patterns
+# ==============================================================================
+# Phase 3 Task 3.2: Layer 1 Keyword & Pattern Heuristics
+# ==============================================================================
+
 ADVISORY_PATTERNS = [
     r"\bshould\s+(?:i|we)\b",
-    r"\brecommend\b",
-    r"\bsuggest\b",
-    r"\bworth\s+(?:it|investing)\b",
+    r"\brecommend(?:ed|ation|s)?\b",
+    r"\bsuggest(?:ion|ions)?\b",
+    r"\bworth\s+(?:it|investing|buying)\b",
     r"\bgood\s+fund\b",
     r"\bbest\s+fund\b",
     r"\btop\s+fund\b",
-    r"\bwhich\s+fund\s+is\s+better\b",
     r"\boutperform\b",
-    r"\bpredict\b",
+    r"\bpredict(?:ion)?\b",
     r"\bwill\s+it\s+(?:grow|give|make)\b",
     r"\bis\s+it\s+(?:safe|good|profitable)\s+to\s+invest\b",
     r"\bright\s+time\s+to\s+invest\b",
@@ -59,17 +64,24 @@ ADVISORY_PATTERNS = [
     r"\binvestment\s+advice\b",
     r"\bcan\s+i\s+get\s+rich\b",
     r"\bbuy\s+or\s+sell\b",
+    r"\bwhich\s+fund\s+should\s+i\s+(?:pick|buy|invest|choose)\b",
+    # Prompt injection / adversarial attacks (Edge Cases T05, 12.1, 12.2)
+    r"\bignore\s+(?:all\s+)?(?:previous\s+)?instructions\b",
+    r"\bpretend\s+(?:you\s+are|to\s+be)\b",
+    r"\bjailbreak\b",
+    r"\bdan\s+mode\b",
+    r"\bact\s+as\s+a\s+(?:financial|investment)\s+advisor\b",
 ]
 
 COMPARATIVE_PATTERNS = [
-    r"\bwhich\s+is\s+better\b",
+    r"\bwhich\s+(?:fund\s+)?is\s+better\b",
     r"\b(?:vs|versus)\b",
     r"\bcompare\b",
     r"\bcomparison\b",
     r"\bbetter\s+than\b",
     r"\bdifference\s+between\b",
     r"\bor\s+should\s+i\s+choose\b",
-    r"\bwhich\s+one\s+should\s+i\s+(?:pick|buy|invest)\b",
+    r"\bwhich\s+one\s+is\s+(?:more\s+profitable|superior)\b",
 ]
 
 PERFORMANCE_PATTERNS = [
@@ -80,6 +92,7 @@ PERFORMANCE_PATTERNS = [
     r"\b(?:1|3|5|10)\s*years?\s+returns?\b",
     r"\bnav\s+history\b",
     r"\btrack\s+record\b",
+    r"\bhistorical\s+growth\b",
 ]
 
 OUT_OF_SCOPE_PATTERNS = [
@@ -90,8 +103,9 @@ OUT_OF_SCOPE_PATTERNS = [
     r"\b(?:prime\s+minister|president|modi|biden|trump|politics|election)\b",
     r"\bcapital\s+of\b",
     r"\bwhat\s+is\s+the\s+meaning\s+of\s+life\b",
-    r"\b(?:system\s+prompt|initial\s+instructions|prompt\s+instructions|internal\s+prompt)\b",
+    r"\b(?:system\s+prompt|initial\s+instructions|prompt\s+instructions|internal\s+prompt|source\s+code)\b",
     r"^(?:hi|hello|hey|good\s+morning|good\s+evening|howdy|sup)[\s!\.]*$",
+    r"^(?:thank\s+you|thanks|thx)[\s!\.]*$",
 ]
 
 FACTUAL_PATTERNS = [
@@ -113,6 +127,10 @@ FACTUAL_PATTERNS = [
     r"\bholdings\b",
     r"\basset\s+allocation\b",
     r"\binception\s+date\b",
+    r"\bhow\s+to\s+(?:invest|redeem|switch|cancel)\b",
+    r"\b(?:pe|pb)\s+ratio\b",
+    r"\bstatement\s+download\b",
+    r"\bcapital\s+gains\s+report\b",
 ]
 
 
@@ -129,25 +147,30 @@ class QueryClassifier:
     def classify_layer1(self, query: str) -> QueryCategory:
         """
         Fast Layer 1 regex heuristic classification without API calls.
+        Executes in < 1 ms.
         """
         query_clean = query.strip().lower()
 
-        # 1. PII Check (Immediate Refusal)
+        # 1. PII Check (Immediate Refusal - Task 3.1)
         has_pii, _ = scan_pii(query)
         if has_pii:
             return QueryCategory.PII_DETECTED
 
-        # 2. Advisory Check
-        for pat in ADVISORY_PATTERNS:
-            if re.search(pat, query_clean):
-                return QueryCategory.ADVISORY
-
-        # 3. Comparative Check
+        # 2. Comparative Check
         for pat in COMPARATIVE_PATTERNS:
             if re.search(pat, query_clean):
                 return QueryCategory.COMPARATIVE
 
-        # 4. Performance Check
+        # 3. Advisory Check
+        for pat in ADVISORY_PATTERNS:
+            if re.search(pat, query_clean):
+                return QueryCategory.ADVISORY
+
+        # 4. Performance Check (with disambiguation for "return policy" or "return process")
+        if re.search(r"\breturn\s+(?:policy|process|procedure|form)\b", query_clean):
+            # Asking about redemption/exit, not historical returns
+            return QueryCategory.FACTUAL
+
         for pat in PERFORMANCE_PATTERNS:
             if re.search(pat, query_clean):
                 return QueryCategory.PERFORMANCE
@@ -193,7 +216,6 @@ class QueryClassifier:
                 max_tokens=25,
             )
             raw = (res.choices[0].message.content or "").strip().upper()
-            # Clean possible markdown or reasoning tokens
             cleaned = re.sub(r"[^A-Z_]", "", raw)
 
             for cat in [

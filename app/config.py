@@ -23,8 +23,13 @@ class Settings(BaseSettings):
     embedding_model: str = Field(default="all-MiniLM-L6-v2", validation_alias="EMBEDDING_MODEL")
 
     # Vector Store
+    vector_db_provider: str = Field(default="local", validation_alias="VECTOR_DB_PROVIDER")  # "pinecone" | "chromadb" | "local"
     vectorstore_path: str = Field(default="./data/vectorstore", validation_alias="VECTORSTORE_PATH")
     vectorstore_collection: str = Field(default="mf_faq_corpus", validation_alias="VECTORSTORE_COLLECTION")
+    pinecone_api_key: Optional[str] = Field(default="", validation_alias="PINECONE_API_KEY")
+    pinecone_index_name: str = Field(default="mf-faq-corpus", validation_alias="PINECONE_INDEX_NAME")
+    pinecone_environment: Optional[str] = Field(default="us-east-1", validation_alias="PINECONE_ENVIRONMENT")
+    chroma_db_path: str = Field(default="./data/chroma", validation_alias="CHROMA_DB_PATH")
 
     # Retrieval
     retrieval_top_k: int = Field(default=5, validation_alias="RETRIEVAL_TOP_K")

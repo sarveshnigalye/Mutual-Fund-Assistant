@@ -49,3 +49,28 @@ def test_pipeline_refuses_pii_query():
     assert res["is_refusal"] is True
     assert res["category"] == "PII_DETECTED"
     assert "⚠️ Please do not share personal information" in res["response"]
+
+
+def test_pipeline_refuses_comparative_query():
+    res = rag_pipeline.run("Compare HDFC Large Cap vs HDFC Multi Cap")
+    assert res["is_refusal"] is True
+    assert res["category"] == "COMPARATIVE"
+    assert "cannot compare funds" in res["response"]
+    assert len(res["retrieved_chunks"]) == 0
+
+
+def test_pipeline_refuses_performance_with_dynamic_url():
+    res = rag_pipeline.run("What are the 3-year returns of HDFC Mid Cap?")
+    assert res["is_refusal"] is True
+    assert res["category"] == "PERFORMANCE"
+    assert "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth" in res["response"]
+    assert len(res["retrieved_chunks"]) == 0
+
+
+def test_pipeline_refuses_out_of_scope_query():
+    res = rag_pipeline.run("What is the capital of France?")
+    assert res["is_refusal"] is True
+    assert res["category"] == "OUT_OF_SCOPE"
+    assert "outside my scope" in res["response"]
+    assert len(res["retrieved_chunks"]) == 0
+

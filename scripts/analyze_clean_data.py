@@ -138,3 +138,4 @@ def analyze_current_chunks():
 if __name__ == "__main__":
     analyze_raw_html_and_clean_text()
     analyze_current_chunks()
+

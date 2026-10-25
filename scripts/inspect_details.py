@@ -52,3 +52,4 @@ def inspect_faqs_and_tables():
 
 if __name__ == "__main__":
     inspect_faqs_and_tables()
+
