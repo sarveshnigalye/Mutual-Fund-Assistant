@@ -82,3 +82,4 @@ def test_vector_indexer_hybrid_local_search():
     assert len(results) > 0
     assert "HDFC Mid" in results[0]["scheme_name"]
     assert "exit load" in results[0]["text"].lower() or "exit load" in results[0]["section_heading"].lower()
+

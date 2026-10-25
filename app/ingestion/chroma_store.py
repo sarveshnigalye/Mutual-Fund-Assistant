@@ -126,3 +126,4 @@ class ChromaVectorStore:
         except Exception as e:
             logger.error(f"ChromaDB search error: {e}")
             return []
+

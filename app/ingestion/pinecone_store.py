@@ -152,3 +152,4 @@ class PineconeVectorStore:
         except Exception as e:
             logger.error(f"Pinecone query error: {e}")
             return []
+
