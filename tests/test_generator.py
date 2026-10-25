@@ -63,3 +63,4 @@ def test_rag_pipeline_fallback_on_unindexed_scheme():
     assert "I don't have verified information on this" in res.response
     assert "https://www.hdfcfund.com" in res.response
     assert res.source_url == "https://www.hdfcfund.com"
+

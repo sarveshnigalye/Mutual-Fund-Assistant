@@ -1,0 +1,184 @@
+{
+  "summary": {
+    "total_schemes": 5,
+    "total_raw_bytes": 2731675,
+    "total_raw_kb": 2667.7,
+    "total_clean_chars": 109154,
+    "total_clean_words": 17860,
+    "total_clean_tokens_est": 23753,
+    "overall_signal_ratio": "4.00%",
+    "overall_noise_ratio": "96.00%"
+  },
+  "schemes": {
+    "hdfc-mid-cap": {
+      "scheme_name": "HDFC Mid-Cap Opportunities Fund",
+      "raw_bytes": 568182,
+      "clean_chars": 22146,
+      "clean_words": 3600,
+      "clean_tokens": 4788,
+      "signal_ratio": 3.9,
+      "faqs_count": 9,
+      "facts": {
+        "expense_ratio": "0.60%",
+        "aum": "\u20b91,01,856.06 Cr",
+        "min_sip": "\u20b9100",
+        "nav": "\u20b9213.42",
+        "benchmark": "NIFTY Midcap 150 Total Return Index",
+        "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+      }
+    },
+    "hdfc-small-cap": {
+      "scheme_name": "HDFC Small Cap Fund",
+      "raw_bytes": 573221,
+      "clean_chars": 22746,
+      "clean_words": 3695,
+      "clean_tokens": 4914,
+      "signal_ratio": 3.97,
+      "faqs_count": 9,
+      "facts": {
+        "expense_ratio": "0.80%",
+        "aum": "\u20b940,800.81 Cr",
+        "min_sip": "\u20b9100",
+        "nav": "\u20b9148.39",
+        "benchmark": "BSE 250 SmallCap Total Return Index",
+        "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+      }
+    },
+    "hdfc-large-cap": {
+      "scheme_name": "HDFC Large Cap / Top 100 Fund",
+      "raw_bytes": 535925,
+      "clean_chars": 20612,
+      "clean_words": 3397,
+      "clean_tokens": 4518,
+      "signal_ratio": 3.85,
+      "faqs_count": 9,
+      "facts": {
+        "expense_ratio": "0.84%",
+        "aum": "\u20b937,293.95 Cr",
+        "min_sip": "\u20b9100",
+        "nav": "\u20b91",
+        "benchmark": "NIFTY 100 Total Return Index",
+        "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+      }
+    },
+    "hdfc-silver-etf-fof": {
+      "scheme_name": "HDFC Silver ETF Fund of Fund (FoF)",
+      "raw_bytes": 450894,
+      "clean_chars": 19494,
+      "clean_words": 3296,
+      "clean_tokens": 4383,
+      "signal_ratio": 4.32,
+      "faqs_count": 9,
+      "facts": {
+        "expense_ratio": "0.18%",
+        "aum": "\u20b94,497.00 Cr",
+        "min_sip": "\u20b9100",
+        "nav": "\u20b931.68",
+        "benchmark": "Domestic Price of Silver Scheme Information Document(SID) Fund house HDFC Mutual Fund Rank (total assets) #2 in India Total AUM \u20b99,34,075",
+        "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+      }
+    },
+    "hdfc-multi-cap": {
+      "scheme_name": "HDFC Multi Cap Fund",
+      "raw_bytes": 603453,
+      "clean_chars": 24156,
+      "clean_words": 3872,
+      "clean_tokens": 5149,
+      "signal_ratio": 4.0,
+      "faqs_count": 9,
+      "facts": {
+        "expense_ratio": "0.71%",
+        "aum": "\u20b919,490.01 Cr",
+        "min_sip": "\u20b9100",
+        "nav": "\u20b918.18",
+        "benchmark": "Nifty 500 Multicap 50:25:25 Total Return Index",
+        "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+      }
+    }
+  },
+  "unique_faqs": [
+    "Can I invest in SIP and Lump Sum of HDFC Large Cap Fund Direct Growth?",
+    "Can I invest in SIP and Lump Sum of HDFC Mid Cap Fund Direct Growth?",
+    "Can I invest in SIP and Lump Sum of HDFC Multi Cap Fund Direct Growth?",
+    "Can I invest in SIP and Lump Sum of HDFC Silver ETF FoF Direct Growth?",
+    "Can I invest in SIP and Lump Sum of HDFC Small Cap Fund Direct Growth?",
+    "How much expense ratio is charged by HDFC Large Cap Fund Direct Growth?",
+    "How much expense ratio is charged by HDFC Mid Cap Fund Direct Growth?",
+    "How much expense ratio is charged by HDFC Multi Cap Fund Direct Growth?",
+    "How much expense ratio is charged by HDFC Silver ETF FoF Direct Growth?",
+    "How much expense ratio is charged by HDFC Small Cap Fund Direct Growth?",
+    "How to Invest in HDFC Large Cap Fund Direct Growth?",
+    "How to Invest in HDFC Mid Cap Fund Direct Growth?",
+    "How to Invest in HDFC Multi Cap Fund Direct Growth?",
+    "How to Invest in HDFC Silver ETF FoF Direct Growth?",
+    "How to Invest in HDFC Small Cap Fund Direct Growth?",
+    "How to Redeem HDFC Large Cap Fund Direct Growth?",
+    "How to Redeem HDFC Mid Cap Fund Direct Growth?",
+    "How to Redeem HDFC Multi Cap Fund Direct Growth?",
+    "How to Redeem HDFC Silver ETF FoF Direct Growth?",
+    "How to Redeem HDFC Small Cap Fund Direct Growth?",
+    "Looking to invest in mutual funds?",
+    "What is the AUM of HDFC Large Cap Fund Direct Growth?",
+    "What is the AUM of HDFC Mid Cap Fund Direct Growth?",
+    "What is the AUM of HDFC Multi Cap Fund Direct Growth?",
+    "What is the AUM of HDFC Silver ETF FoF Direct Growth?",
+    "What is the AUM of HDFC Small Cap Fund Direct Growth?",
+    "What is the NAV of HDFC Large Cap Fund Direct Growth?",
+    "What is the NAV of HDFC Mid Cap Fund Direct Growth?",
+    "What is the NAV of HDFC Multi Cap Fund Direct Growth?",
+    "What is the NAV of HDFC Silver ETF FoF Direct Growth?",
+    "What is the NAV of HDFC Small Cap Fund Direct Growth?",
+    "What is the PE and PB ratio of HDFC Large Cap Fund Direct Growth?",
+    "What is the PE and PB ratio of HDFC Mid Cap Fund Direct Growth?",
+    "What is the PE and PB ratio of HDFC Multi Cap Fund Direct Growth?",
+    "What is the PE and PB ratio of HDFC Silver ETF FoF Direct Growth?",
+    "What is the PE and PB ratio of HDFC Small Cap Fund Direct Growth?",
+    "What kind of returns does HDFC Large Cap Fund Direct Growth provide?",
+    "What kind of returns does HDFC Mid Cap Fund Direct Growth provide?",
+    "What kind of returns does HDFC Multi Cap Fund Direct Growth provide?",
+    "What kind of returns does HDFC Silver ETF FoF Direct Growth provide?",
+    "What kind of returns does HDFC Small Cap Fund Direct Growth provide?"
+  ],
+  "key_facts_matrix": {
+    "hdfc-mid-cap": {
+      "expense_ratio": "0.60%",
+      "aum": "\u20b91,01,856.06 Cr",
+      "min_sip": "\u20b9100",
+      "nav": "\u20b9213.42",
+      "benchmark": "NIFTY Midcap 150 Total Return Index",
+      "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+    },
+    "hdfc-small-cap": {
+      "expense_ratio": "0.80%",
+      "aum": "\u20b940,800.81 Cr",
+      "min_sip": "\u20b9100",
+      "nav": "\u20b9148.39",
+      "benchmark": "BSE 250 SmallCap Total Return Index",
+      "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+    },
+    "hdfc-large-cap": {
+      "expense_ratio": "0.84%",
+      "aum": "\u20b937,293.95 Cr",
+      "min_sip": "\u20b9100",
+      "nav": "\u20b91",
+      "benchmark": "NIFTY 100 Total Return Index",
+      "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+    },
+    "hdfc-silver-etf-fof": {
+      "expense_ratio": "0.18%",
+      "aum": "\u20b94,497.00 Cr",
+      "min_sip": "\u20b9100",
+      "nav": "\u20b931.68",
+      "benchmark": "Domestic Price of Silver Scheme Information Document(SID) Fund house HDFC Mutual Fund Rank (total assets) #2 in India Total AUM \u20b99,34,075",
+      "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+    },
+    "hdfc-multi-cap": {
+      "expense_ratio": "0.71%",
+      "aum": "\u20b919,490.01 Cr",
+      "min_sip": "\u20b9100",
+      "nav": "\u20b918.18",
+      "benchmark": "Nifty 500 Multicap 50:25:25 Total Return Index",
+      "exit_load": "A fee payable to a mutual fund house for exiting a fund (fully or partially) before the completion of a specified period from the date of investment."
+    }
+  }
+}
