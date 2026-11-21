@@ -8,6 +8,7 @@ the ChromaDB count check and the Phase 6 regression tests on top.
 import json
 import re
 from dataclasses import dataclass, field
+from datetime import date
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from app.ingestion.normalizer import numeric_key
@@ -40,6 +41,44 @@ CORE_FIELDS: Dict[str, Tuple[str, List[re.Pattern]]] = {
 INFO_FIELDS: Dict[str, Tuple[str, List[re.Pattern]]] = {
     "aum": ("Fund size (AUM)", [re.compile(r"Fund size\s*\(AUM\)\s*₹\s?(\d[\d,]*(?:\.\d+)?(?:\s*Cr)?)", re.IGNORECASE)]),
 }
+
+
+# "NAV: 23 Oct '26 ₹213.42" — the date the page's own data is as of
+_NAV_DATE = re.compile(r"\bNAV:?\s*(\d{1,2}) (Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* '(\d{2})\b")
+_MONTH_NUM = {m: i for i, m in enumerate(
+    ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"], start=1)}
+# NAVs are published on business days and Groww shows the latest, so a few days of lag is normal
+# (weekends, holidays). More than this means the page content itself is old.
+MAX_NAV_LAG_DAYS = 4
+
+
+def nav_dates(corpus: List[Dict[str, Any]]) -> Dict[str, date]:
+    """{scheme_id: latest 'NAV as of' date shown on the page}."""
+    found: Dict[str, date] = {}
+    for c in corpus:
+        for d, mon, yy in _NAV_DATE.findall(str(c.get("text", ""))):
+            try:
+                as_of = date(2000 + int(yy), _MONTH_NUM[mon], int(d))
+            except ValueError:
+                continue
+            sid = str(c.get("scheme_id", ""))
+            if sid not in found or as_of > found[sid]:
+                found[sid] = as_of
+    return found
+
+
+def stale_content_warnings(corpus: List[Dict[str, Any]], scrape_date: Optional[str]) -> List[str]:
+    """Warn when a page's NAV date is far behind the scrape date (cached / stale page content)."""
+    try:
+        scraped = date.fromisoformat(str(scrape_date))
+    except ValueError:
+        return []
+    return [
+        f"`{sid}` page shows NAV as of {as_of} — {(scraped - as_of).days} days before scrape date {scraped}; "
+        "the page content may be stale."
+        for sid, as_of in sorted(nav_dates(corpus).items())
+        if (scraped - as_of).days > MAX_NAV_LAG_DAYS
+    ]
 
 
 @dataclass
@@ -167,6 +206,8 @@ def validate_corpus(
         for name, value in facts.get(scheme_id, {}).items():
             if not value:
                 result.errors.append(f"Scheme `{scheme_id}`: core field '{CORE_FIELDS[name][0]}' not found.")
+
+    result.warnings += stale_content_warnings(corpus, run_date)
 
     unexpected = sorted(set(grouped) - set(expected_schemes))
     if unexpected:

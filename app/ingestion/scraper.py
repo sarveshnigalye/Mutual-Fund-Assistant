@@ -11,12 +11,13 @@ import logging
 import os
 import re
 import time
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 from bs4 import BeautifulSoup
 from selenium import webdriver
 
 from app.config import settings
-from app.ingestion.snapshot import ist_today
+from app.ingestion.snapshot import IST, ist_today
 
 logger = logging.getLogger("ingestion.scraper")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
@@ -138,39 +139,37 @@ class GrowwScraper:
         driver_path = (settings.chrome_driver_path or "auto").strip()
 
         if browser_type == "edge":
-            from selenium.webdriver.edge.options import Options as EdgeOptions
-            from selenium.webdriver.edge.service import Service as EdgeService
-            from webdriver_manager.microsoft import EdgeChromiumDriverManager
+            from selenium.webdriver.edge.options import Options as Opts
+            from selenium.webdriver.edge.service import Service
+            driver_cls, ua = webdriver.Edge, USER_AGENTS["edge"]
 
-            options = EdgeOptions()
-            options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
-            options.add_argument(f"user-agent={USER_AGENTS['edge']}")
-            service = EdgeService(EdgeChromiumDriverManager().install())
-            return webdriver.Edge(service=service, options=options)
+            def fallback_driver_path():
+                from webdriver_manager.microsoft import EdgeChromiumDriverManager
+                return EdgeChromiumDriverManager().install()
         else:
-            from selenium.webdriver.chrome.options import Options as ChromeOptions
-            from selenium.webdriver.chrome.service import Service as ChromeService
+            from selenium.webdriver.chrome.options import Options as Opts
+            from selenium.webdriver.chrome.service import Service
+            driver_cls, ua = webdriver.Chrome, USER_AGENTS["chrome"]
 
-            options = ChromeOptions()
-            options.add_argument("--headless=new")
-            options.add_argument("--no-sandbox")
-            options.add_argument("--disable-dev-shm-usage")
-            options.add_argument("--disable-gpu")
-            options.add_argument("--window-size=1920,1080")
-            options.add_argument("--disable-blink-features=AutomationControlled")
-            options.add_argument(f"user-agent={USER_AGENTS['chrome']}")
-            if driver_path.lower() != "auto" and os.path.exists(driver_path):
-                # e.g. the chromedriver preinstalled on GitHub's ubuntu-latest image
-                service = ChromeService(executable_path=driver_path)
-            else:
+            def fallback_driver_path():
                 from webdriver_manager.chrome import ChromeDriverManager
+                return ChromeDriverManager().install()
 
-                service = ChromeService(ChromeDriverManager().install())
-            return webdriver.Chrome(service=service, options=options)
+        options = Opts()
+        for arg in ("--headless=new", "--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu",
+                    "--window-size=1920,1080", "--disable-blink-features=AutomationControlled", f"user-agent={ua}"):
+            options.add_argument(arg)
+
+        # 1. An explicit driver (e.g. the chromedriver preinstalled on GitHub's ubuntu-latest image)
+        if driver_path.lower() != "auto" and os.path.exists(driver_path):
+            return driver_cls(service=Service(executable_path=driver_path), options=options)
+        # 2. Selenium Manager (built into Selenium >= 4.6) finds/downloads the matching driver
+        try:
+            return driver_cls(options=options)
+        except Exception as e:
+            logger.warning(f"Selenium Manager could not start {browser_type}: {e}; trying webdriver-manager.")
+        # 3. webdriver-manager as a last resort
+        return driver_cls(service=Service(fallback_driver_path()), options=options)
 
     def _wait_for_fund_data(self, driver) -> None:
         """Waits for fund data to render; on timeout, carries on and lets validation decide."""
@@ -402,7 +401,8 @@ class GrowwScraper:
     def parse_saved_pages(self, html_dir: str, urls_file: str = "data/urls.json") -> List[ScrapedDocument]:
         """Development / manual-fallback only: parse saved `<scheme_id>.html` files instead of fetching.
 
-        The scheduled refresh never calls this; it always fetches live pages.
+        The scheduled refresh never calls this; it always fetches live pages. Each page is stamped with
+        the date its file was saved (IST), never today, so an old copy can never pass as fresh data.
         """
         with open(urls_file, "r", encoding="utf-8") as f:
             targets = json.load(f)
@@ -417,9 +417,10 @@ class GrowwScraper:
                 marker = detect_block_page(html)
                 if marker:
                     raise BlockedPageError(f"Bot-block / CAPTCHA page detected (matched '{marker}')")
+                saved_on = datetime.fromtimestamp(os.path.getmtime(path), IST).strftime("%Y-%m-%d")
                 doc = self._parse_html(
                     html, scheme_id, target.get("scheme_name", scheme_id), target.get("category", "Mutual Fund"),
-                    target["url"], target.get("amc", "HDFC Mutual Fund"), self.run_date,
+                    target["url"], target.get("amc", "HDFC Mutual Fund"), saved_on,
                 )
                 doc.page_sha256 = sha256_text(visible_text(html))
                 documents.append(doc)

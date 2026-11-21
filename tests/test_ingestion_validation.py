@@ -9,8 +9,14 @@ from app.ingestion.chunker import DocumentChunker, make_chunk_id
 from app.ingestion.cleaner import clean
 from app.ingestion.indexer import VectorIndexer
 from app.ingestion.normalizer import normalize
-from app.ingestion.quality import compare_with_previous, extract_facts, load_expected_schemes, validate_corpus
-from app.ingestion.scraper import ScrapedDocument
+from app.ingestion.quality import (
+    compare_with_previous,
+    extract_facts,
+    load_expected_schemes,
+    nav_dates,
+    validate_corpus,
+)
+from app.ingestion.scraper import GrowwScraper, ScrapedDocument
 
 RUN_DATE = "2026-11-21"
 RUN_ID = "42"
@@ -143,6 +149,50 @@ def test_gate_fails_on_foreign_citation():
 def test_gate_fails_without_metadata():
     result = validate_corpus(make_corpus(), None, EXPECTED)
     assert any("metadata" in e.lower() for e in result.errors)
+
+
+# ------------------------------------------------------------------------------
+# Stale page content: the page's own NAV date far behind the scrape date
+# ------------------------------------------------------------------------------
+def with_nav(corpus, nav_text):
+    for c in corpus:
+        if c["section_heading"].startswith("Key Facts"):
+            c["text"] += f" NAV: {nav_text} ₹232.52"
+    return corpus
+
+
+def test_nav_dates_are_read_from_page_text():
+    corpus = with_nav(make_corpus(), "20 Nov '26")
+    assert set(nav_dates(corpus).values()) == {__import__("datetime").date(2026, 11, 20)}
+
+
+def test_no_warning_for_normal_nav_lag():
+    result = run_gate(with_nav(make_corpus(), "20 Nov '26"))  # one day behind RUN_DATE
+    assert result.passed and result.warnings == []
+
+
+def test_warns_when_page_content_is_weeks_old():
+    result = run_gate(with_nav(make_corpus(), "23 Oct '26"))
+    assert result.passed  # a warning, not a block
+    stale = [w for w in result.warnings if "may be stale" in w]
+    assert len(stale) == len(EXPECTED) and "29 days" in stale[0]
+
+
+def test_offline_pages_keep_their_own_saved_date(tmp_path):
+    import os
+    from datetime import datetime
+
+    html_dir = tmp_path / "html"
+    html_dir.mkdir()
+    page = "<html><body><div>Expense ratio 0.60%</div>" + "<p>The scheme invests in mid cap equity stocks.</p>" * 3 + "</body></html>"
+    for scheme_id in EXPECTED:
+        path = html_dir / f"{scheme_id}.html"
+        path.write_text(page, encoding="utf-8")
+        old = datetime(2026, 10, 25, 12, 0).timestamp()
+        os.utime(path, (old, old))
+    docs = GrowwScraper(raw_cache_dir=str(tmp_path / "raw"), run_date=RUN_DATE).parse_saved_pages(str(html_dir))
+    assert len(docs) == len(EXPECTED)
+    assert {d.scrape_date for d in docs} == {"2026-10-25"}  # never stamped with today's date
 
 
 # ------------------------------------------------------------------------------
