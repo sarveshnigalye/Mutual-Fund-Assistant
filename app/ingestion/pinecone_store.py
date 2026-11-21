@@ -11,6 +11,10 @@ try:
     from pinecone import Pinecone, ServerlessSpec
     PINECONE_AVAILABLE = True
 except ImportError:
+    # Pinecone is optional (VECTOR_DB_PROVIDER=pinecone). Keep the names defined so the module's
+    # surface is the same either way (and tests can patch `Pinecone` without the SDK installed).
+    Pinecone = None
+    ServerlessSpec = None
     PINECONE_AVAILABLE = False
 
 from app.config import settings
@@ -36,7 +40,7 @@ class PineconeVectorStore:
         self.client: Optional[Any] = None
         self.index: Optional[Any] = None
 
-        if PINECONE_AVAILABLE and self.api_key:
+        if Pinecone is not None and self.api_key:  # looked up at call time, so a patched client works
             try:
                 self.client = Pinecone(api_key=self.api_key)
                 self._connect_or_create_index()
