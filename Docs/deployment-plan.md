@@ -3,9 +3,9 @@
 > **Project:** RAG-based Facts-Only Mutual Fund FAQ Assistant (HDFC AMC)
 > **Target platform:** [Railway](https://railway.com)
 > **Reference Docs:** [implementation-plan.md](./implementation-plan.md) · [architecture.md](./architecture.md) · [edge-cases.md](./edge-cases.md)
-> **Version:** 1.0
-> **Created:** 2026-11-21
-> **Status:** Plan — not yet executed. Code prerequisites in **Phase D1** are not implemented.
+> **Version:** 1.1
+> **Created:** 2026-11-21 · **Updated:** 2026-11-21 — Phase D1 code changes implemented and rehearsed locally; `.railway/railway.ts`, CI workflow and the refresh-notify step added
+> **Status:** Code ready (D1 ✅, D4 workflow step ✅, P7 CI ✅). Not yet deployed: needs D0 (GitHub repo, merge, secrets), D2 apply, D3–D5.
 
 ---
 
@@ -93,7 +93,29 @@ flowchart LR
 
 ## Phase D1 — Code Changes Required for Railway
 
-These are **not implemented yet**. Each one closes a gap between the local or self-hosted setup that Phase 7 targets and a Railway container.
+**Status: all implemented (2026-11-21).** Each one closes a gap between the local or self-hosted setup that Phase 7 targets and a Railway container.
+
+| # | Implemented in |
+| :---: | :--- |
+| D1.1 | `snapshot.live_*_path()` follow `VECTORSTORE_PATH` / `CHROMA_DB_PATH` / `DATA_METADATA_PATH`; `SNAPSHOT_*_PATH` = fixed layout inside a snapshot; `publish_snapshot.check_layout()` |
+| D1.2 | `app/ingestion/sync.py` (`sync_from_github` / `sync_from_git` / `sync_from_dir`, shared `install()`); `scripts/sync_data.py --from-github [owner/repo]`; `GITHUB_API_URL` override (GitHub Enterprise / tests) |
+| D1.3 | `scripts/railway_start.py` (api) and `scripts/railway_start.py streamlit` |
+| D1.4 | `app/api/admin.py`: `POST /api/admin/refresh-data`, `GET /api/admin/data-status` |
+| D1.5 | `app/main.py` lifespan poller (`SNAPSHOT_POLL_HOURS`) |
+| D1.6 | Lazy Selenium import in `scraper._create_driver()`; `requirements.txt` (runtime) / `requirements-ingest.txt` (build + tests) |
+| D1.7 | Exact pins `scikit-learn==1.9.1`, `rank-bm25==0.2.2`, `joblib==1.6.0` (numpy/scipy bounded: no single numpy release has wheels for both 3.11 and 3.15); `library_versions` in snapshot metadata; mismatch warning on load/sync and in `data-status` |
+| D1.8 | `app/api/limits.py`: `RATE_LIMIT_PER_MINUTE` (per IP, `/api/chat` only, 0 = off) and `MAX_REQUEST_BYTES` (413) |
+| D1.9 | `/api/health` adds `index_loaded`, `snapshot_generated_at`, `scrape_date` (always 200) |
+| D1.10 | `tests/test_deployment.py` (fake GitHub, admin auth, limits, launcher, Selenium-free import, version checks) |
+
+**Local rehearsal (2026-11-21):** `railway_start.py` against an empty "volume" directory and a local stand-in for the GitHub API (token-protected, serving the real 178-chunk snapshot):
+- **Cold start:** downloaded and installed the snapshot, then served with `index_loaded: true`.
+- **Refresh:** `POST /api/admin/refresh-data` with no or a wrong token returned 401. With the right token it returned 202, the new snapshot was installed, and the running API hot-reloaded it with no restart.
+- **Rate limit:** with `RATE_LIMIT_PER_MINUTE=3`, the 4th chat request returned 429 with `Retry-After`. Other client IPs and other endpoints were unaffected. A 20 KB body returned 413.
+- **Restart:** the startup sync reported "already up to date" and downloaded nothing. Chat threads persisted on the volume.
+- **Windows binding:** on Windows, `::` is IPv6-only, so the launcher defaults to `0.0.0.0` there. Linux (Railway) keeps `::` (dual-stack).
+
+Original gap analysis:
 
 | # | Gap on Railway | Change | Files |
 | :---: | :--- | :--- | :--- |
@@ -125,7 +147,9 @@ railway config init                 # creates .railway/README.md and .railway/ra
 npm install --save-dev railway      # TypeScript types for railway/iac
 ```
 
-### D2.2 `.railway/railway.ts` (proposed)
+### D2.2 `.railway/railway.ts` (committed — the file in the repo is authoritative; snippet below is the original proposal)
+
+> The committed file differs from this snippet in three ways. Both services start through `scripts/railway_start.py`: the api with no argument, Streamlit as `python scripts/railway_start.py streamlit`, so neither depends on shell expansion of `$PORT`. The api service also sets `RATE_LIMIT_PER_MINUTE=20` and `MAX_REQUEST_BYTES=16384`. Replace `<owner>/<repo>` there before applying.
 
 ```ts
 import { defineRailway, project, service, volume, github, preserve } from "railway/iac";
@@ -242,7 +266,7 @@ Later, the `railwayapp/config@v1` GitHub Action can plan IaC changes on PRs that
                -H "Authorization: Bearer $RAILWAY_REFRESH_TOKEN"
 ```
 
-Also add `("notify", "Notify Railway to load the snapshot")` to `STAGES` in `scripts/report_failure.py`, so the alert names the stage.
+✅ Implemented in `.github/workflows/daily-data-refresh.yml` (step `notify`), together with the `notify` stage in `scripts/report_failure.py`. The step is **skipped until the `RAILWAY_REFRESH_URL` secret exists**, so the workflow keeps working before deployment. The workflow now installs `requirements-ingest.txt`.
 
 ---
 
@@ -320,6 +344,8 @@ These are estimates. Check the real figures in Railway → Usage after a week, a
 | `REFRESH_TOKEN` | ✅ | | random 32+ bytes; same as GitHub `RAILWAY_REFRESH_TOKEN` | 🔒 |
 | `PORT` | ✅ | (Railway-provided) | `8000` on `api` (fixed for the private URL) | |
 | `RAILPACK_PYTHON_VERSION` | ✅ | ✅ | `3.11` | |
+| `RATE_LIMIT_PER_MINUTE` | ✅ | | `20` (per client IP on `/api/chat`; `0` = off, the local default) | |
+| `MAX_REQUEST_BYTES` | ✅ | | `16384` (larger bodies get 413) | |
 | `TZ` | ✅ | | `Asia/Kolkata` | |
 | `API_URL` | | ✅ | `http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8000/api` | |
 
@@ -347,10 +373,10 @@ GitHub Actions secrets: `RAILWAY_REFRESH_URL`, `RAILWAY_REFRESH_TOKEN` (and `RAI
 - **P1 — Repo visibility** (public = no `SNAPSHOT_TOKEN`; private = PAT). *Decision needed.*
 - **P2 — Keep Streamlit?** `/app` already covers the UI. Dropping `streamlit` halves cost and removes the private-network dependency. *Decision needed.*
 - **P3 — Custom domain?** If yes, add it to IaC `domains` and create the CNAME. *Decision needed.*
-- **P4 — Implement Phase D1** (code changes). Nothing in this plan works on Railway without D1.1–D1.4 and D1.6–D1.7.
+- ~~**P4 — Implement Phase D1**~~ ✅ Done 2026-11-21 (see Phase D1 status table).
 - **P5 — Run Phase 7.12 on GitHub first** (first `workflow_dispatch`, 3 scheduled days, one forced failure) so the data pipeline is proven before Railway depends on it.
 - **P6 — Phase 8 documentation** (README deployment section and `architecture.md` update) once deployed.
-- **P7 — Add a CI test workflow** (`pytest` on push/PR) so Railway's *Wait for CI* can block red builds; today only the daily refresh workflow exists.
+- ~~**P7 — Add a CI test workflow**~~ ✅ `.github/workflows/ci.yml`. The `tests` job runs the full suite on Python 3.11. The `runtime-install` job installs only `requirements.txt`, as Railway does, and imports the app with no Selenium, ChromaDB or pytest. Enable Railway's *Wait for CI* once the repo is on GitHub.
 - **P8 — Known answer gap (pre-existing):** "riskometer level of HDFC Small Cap" returns the fallback. It isn't a deployment blocker, but users will hit it.
 - **P9 — Verify the IaC details marked ⚠️ in D2.2** (`$PORT` expansion, reference composition, `healthcheckTimeout` units) with `railway config plan` on first apply.
 

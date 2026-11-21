@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Optional, Tuple
 from app.config import settings
 
 from app.ingestion.indexer import VectorIndexer
-from app.ingestion.snapshot import snapshot_version
+from app.ingestion.snapshot import cached_metadata, library_mismatches, snapshot_version
 
 logger = logging.getLogger("core.retriever")
 
@@ -110,6 +110,10 @@ class MutualFundRetriever:
     def snapshot_version(self) -> Optional[str]:
         return self._snapshot_version
 
+    @property
+    def is_loaded(self) -> bool:
+        return self._is_loaded
+
     def load(self) -> bool:
         """Loads vector index into memory (and picks up a newer snapshot if one was published)."""
         if not self._is_loaded:
@@ -120,6 +124,7 @@ class MutualFundRetriever:
                     if self._is_loaded:
                         self._snapshot_version = version
                         self._last_check = time.monotonic()
+                        self._warn_on_library_mismatch()
             return self._is_loaded
         self._maybe_reload()
         return True
@@ -138,6 +143,14 @@ class MutualFundRetriever:
             return self.reload(version)
         finally:
             self._lock.release()
+
+    def _warn_on_library_mismatch(self) -> None:
+        mismatches = library_mismatches(cached_metadata(self.metadata_path))
+        if mismatches:
+            logger.warning(
+                f"Index was built with different library versions (built, installed): {mismatches}. "
+                "Pin the same versions on the build runner and this host (requirements.txt)."
+            )
 
     def reload(self, version: Optional[str] = None) -> bool:
         """Loads the index from disk into a fresh indexer and swaps it in on success."""
@@ -158,6 +171,7 @@ class MutualFundRetriever:
             logger.warning(f"Snapshot {version} could not be loaded; still serving {self._snapshot_version}.")
             return False
         self.indexer = fresh
+        self._warn_on_library_mismatch()
         previous, self._snapshot_version = self._snapshot_version, version
         self._is_loaded = True
         logger.info(f"Reloaded vector index: snapshot {previous} -> {version} ({len(fresh.chunks)} chunks).")

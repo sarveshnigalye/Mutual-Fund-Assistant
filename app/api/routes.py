@@ -14,6 +14,7 @@ from app.chat.models import (
 )
 from app.config import settings
 from app.core.generator import rag_pipeline
+from app.ingestion.snapshot import current_scrape_date
 
 logger = logging.getLogger("api.routes")
 router = APIRouter(prefix="/api", tags=["Chat & Threads"])
@@ -147,11 +148,23 @@ def rename_thread(request: ThreadUpdate, thread_id: str = Path(..., description=
 
 @router.get("/health", tags=["Health"])
 def health_check():
-    """Health check endpoint confirming system health and configuration."""
+    """Health check endpoint confirming system health and configuration.
+
+    Always 200 while the process is up, even without an index: a first deploy must be able to go
+    live and then receive its data (Railway routes traffic only after this returns 200).
+    """
+    retriever = rag_pipeline.retriever
+    try:
+        retriever.load()  # cheap once loaded; also lets the hot reload happen without chat traffic
+    except Exception as e:
+        logger.warning(f"Index check during health probe failed: {e}")
     return {
         "status": "healthy",
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
         "embedding_model": settings.embedding_model,
+        "index_loaded": retriever.is_loaded,
+        "snapshot_generated_at": retriever.snapshot_version,
+        "scrape_date": current_scrape_date(),
         "disclaimer": "Facts-only. No investment advice.",
     }

@@ -81,6 +81,19 @@ def rename_staging_collection(live_collection: str) -> None:
     print(proc.stdout.strip())
 
 
+def check_layout() -> None:
+    """Publishing commits the repo-layout paths, so this host must serve from exactly those."""
+    expected = {
+        "VECTORSTORE_PATH": (snapshot.live_vectorstore_path(), snapshot.SNAPSHOT_VECTORSTORE_PATH),
+        "CHROMA_DB_PATH": (snapshot.live_chroma_path(), snapshot.SNAPSHOT_CHROMA_PATH),
+        "DATA_METADATA_PATH": (snapshot.live_metadata_path(), snapshot.SNAPSHOT_METADATA_PATH),
+    }
+    wrong = [f"{k}={live}" for k, (live, layout) in expected.items()
+             if os.path.abspath(live) != os.path.abspath(os.path.join(ROOT, layout))]
+    if wrong:
+        raise SystemExit(f"publish_snapshot.py must run in the repo checkout with default data paths; got {wrong}.")
+
+
 def promote(live_collection: str) -> dict:
     """Moves the staging build into the live paths. Returns the live metadata."""
     metadata = snapshot.read_metadata(snapshot.STAGING_METADATA_PATH)
@@ -91,19 +104,19 @@ def promote(live_collection: str) -> dict:
     if has_chroma:
         rename_staging_collection(live_collection)
 
-    metadata["corpus_path"] = f"{snapshot.LIVE_VECTORSTORE_PATH}/corpus.json"
+    metadata["corpus_path"] = f"{snapshot.SNAPSHOT_VECTORSTORE_PATH}/corpus.json"
     metadata["staging"] = False
     metadata["promoted_at"] = snapshot.ist_now().isoformat(timespec="seconds")
     if has_chroma and isinstance(metadata.get("chroma"), dict):
-        metadata["chroma"].update({"path": snapshot.LIVE_CHROMA_PATH, "collection": live_collection})
+        metadata["chroma"].update({"path": snapshot.SNAPSHOT_CHROMA_PATH, "collection": live_collection})
     snapshot.write_json_atomic(os.path.join(snapshot.STAGING_VECTORSTORE_PATH, "metadata.json"), metadata)
 
     # Chroma first: it is the move most likely to fail (Windows file locks), and if it does,
     # nothing live has changed yet. metadata.json goes last because it triggers the app reload.
     if has_chroma:
-        snapshot.replace_dir(snapshot.STAGING_CHROMA_PATH, snapshot.LIVE_CHROMA_PATH)
-    snapshot.replace_dir(snapshot.STAGING_VECTORSTORE_PATH, snapshot.LIVE_VECTORSTORE_PATH)
-    snapshot.write_json_atomic(snapshot.LIVE_METADATA_PATH, metadata)  # last: triggers app reload
+        snapshot.replace_dir(snapshot.STAGING_CHROMA_PATH, snapshot.SNAPSHOT_CHROMA_PATH)
+    snapshot.replace_dir(snapshot.STAGING_VECTORSTORE_PATH, snapshot.SNAPSHOT_VECTORSTORE_PATH)
+    snapshot.write_json_atomic(snapshot.SNAPSHOT_METADATA_PATH, metadata)  # last: triggers app reload
     os.remove(snapshot.STAGING_METADATA_PATH)
     print(f"✅ Promoted staging → live (chroma: {'yes' if has_chroma else 'no'}).")
     return metadata
@@ -111,9 +124,9 @@ def promote(live_collection: str) -> dict:
 
 def publish(metadata: dict, remote: str, branch: str, push: bool) -> str:
     """Creates a parentless commit of the live snapshot files and force-pushes it to `branch`."""
-    paths = [snapshot.LIVE_VECTORSTORE_PATH, snapshot.LIVE_METADATA_PATH]
-    if os.path.isdir(snapshot.LIVE_CHROMA_PATH):
-        paths.append(snapshot.LIVE_CHROMA_PATH)
+    paths = [snapshot.SNAPSHOT_VECTORSTORE_PATH, snapshot.SNAPSHOT_METADATA_PATH]
+    if os.path.isdir(snapshot.SNAPSHOT_CHROMA_PATH):
+        paths.append(snapshot.SNAPSHOT_CHROMA_PATH)
 
     with tempfile.TemporaryDirectory() as tmp:
         env = {
@@ -155,6 +168,7 @@ def main(argv=None) -> int:
     if not staged:
         raise SystemExit(f"No staging build found ({snapshot.STAGING_METADATA_PATH}). Run ingest.py --staging.")
     check_marker(args.marker, staged)
+    check_layout()
 
     metadata = promote(settings.vectorstore_collection)
     commit = publish(metadata, args.remote, args.branch, push=not args.no_push)

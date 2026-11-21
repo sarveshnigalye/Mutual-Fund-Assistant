@@ -157,6 +157,8 @@ def run_ingestion(
         "page_hashes": page_hashes,
         "failures": failures,
         "core_facts": extract_facts([c.to_dict() for c in chunks]),
+        # hosts must unpickle the index with the same versions (see requirements.txt)
+        "library_versions": snapshot.library_versions(),
     }
     catalog = indexer.index_chunks(chunks, extra_metadata=extra)
     timings["embed"] = catalog["timings"]["embed_seconds"]

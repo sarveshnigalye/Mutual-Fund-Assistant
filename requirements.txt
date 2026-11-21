@@ -1,20 +1,22 @@
+# Runtime dependencies: the API (+ web UI) and the Streamlit frontend.
+# This is what Railway installs. Scraping / ChromaDB / test tooling live in requirements-ingest.txt.
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 streamlit>=1.35.0
 groq>=0.9.0
-scikit-learn>=1.4.0
-rank-bm25>=0.2.2
-chromadb>=0.5.0
-scipy>=1.10.0
-numpy>=1.24.0
-pandas>=2.0.0
-beautifulsoup4>=4.12.0
-selenium>=4.20.0
-webdriver-manager>=4.0.0
-python-dotenv>=1.0.0
 pydantic>=2.7.0
 pydantic-settings>=2.2.0
+python-dotenv>=1.0.0          # pydantic-settings reads .env through it
 requests>=2.31.0
-pytest>=8.0.0
-httpx>=0.27.0
+beautifulsoup4>=4.12.0        # imported by the ingestion modules the retriever shares
 
+# The daily snapshot contains joblib pickles of these objects (TF-IDF vectorizer/matrix, BM25).
+# The GitHub Actions build and every host that loads the snapshot must use the SAME versions,
+# otherwise the hot reload rejects the new index and the data silently stops updating.
+scikit-learn==1.9.1
+rank-bm25==0.2.2
+joblib==1.6.0
+# numpy/scipy arrays unpickle across minor versions; an exact pin is impossible anyway
+# (numpy 2.5 has no Python 3.11 wheels, numpy 2.4 none for 3.15).
+numpy>=2.0,<3
+scipy>=1.13,<2

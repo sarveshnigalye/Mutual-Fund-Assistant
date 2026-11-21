@@ -33,6 +33,9 @@ jobs:
       SCRAPE_DELAY_SECONDS: "3"
       PYTHONUNBUFFERED: "1"
       # Ingestion uses local TF-IDF/BM25 embeddings: no API keys are needed.
+      # Optional: the deployed API's refresh endpoint (Railway). Empty = the notify step is skipped.
+      # Job-level because a step's `if:` can't see its own `env:` and `secrets` isn't allowed in `if:`.
+      RAILWAY_REFRESH_URL: ${{ secrets.RAILWAY_REFRESH_URL }}
     steps:
       - uses: actions/checkout@v4
 
@@ -40,12 +43,13 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
+          cache-dependency-path: requirements*.txt
 
       - name: Install dependencies
         id: setup
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          pip install -r requirements-ingest.txt
           if [ -n "${CHROMEWEBDRIVER:-}" ] && [ -x "$CHROMEWEBDRIVER/chromedriver" ]; then
             echo "CHROME_DRIVER_PATH=$CHROMEWEBDRIVER/chromedriver" >> "$GITHUB_ENV"
           fi
@@ -68,6 +72,17 @@ jobs:
       - name: Promote staging and publish snapshot
         id: publish
         run: python scripts/publish_snapshot.py --branch data-snapshot --summary "$GITHUB_STEP_SUMMARY"
+
+      - name: Tell the deployed app to load the new snapshot
+        id: notify
+        if: success() && env.RAILWAY_REFRESH_URL != ''
+        env:
+          RAILWAY_REFRESH_TOKEN: ${{ secrets.RAILWAY_REFRESH_TOKEN }}
+        run: |
+          curl --fail-with-body --silent --show-error --retry 3 --retry-delay 20 --max-time 60 \
+               -X POST "$RAILWAY_REFRESH_URL" \
+               -H "Authorization: Bearer $RAILWAY_REFRESH_TOKEN"
+          echo "- 🚀 Deployed app notified: \`$RAILWAY_REFRESH_URL\`" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload data for debugging
         if: always()

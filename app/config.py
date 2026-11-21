@@ -35,6 +35,17 @@ class Settings(BaseSettings):
     data_metadata_path: str = Field(default="./data/metadata.json", validation_alias="DATA_METADATA_PATH")
     index_reload_check_seconds: int = Field(default=60, validation_alias="INDEX_RELOAD_CHECK_SECONDS")
 
+    # Snapshot sync for hosted deployments (Railway): pull the data-snapshot branch from GitHub
+    snapshot_repo: str = Field(default="", validation_alias="SNAPSHOT_REPO")  # "owner/repo"; empty = off
+    snapshot_branch: str = Field(default="data-snapshot", validation_alias="SNAPSHOT_BRANCH")
+    snapshot_token: Optional[str] = Field(default="", validation_alias="SNAPSHOT_TOKEN")  # private repos only
+    snapshot_poll_hours: float = Field(default=0, validation_alias="SNAPSHOT_POLL_HOURS")  # 0 = no polling
+    refresh_token: Optional[str] = Field(default="", validation_alias="REFRESH_TOKEN")  # empty = admin API off
+
+    # Abuse protection for the public API (0 = off; set e.g. 20 in production)
+    rate_limit_per_minute: int = Field(default=0, validation_alias="RATE_LIMIT_PER_MINUTE")
+    max_request_bytes: int = Field(default=16384, validation_alias="MAX_REQUEST_BYTES")
+
     # Retrieval
     retrieval_top_k: int = Field(default=5, validation_alias="RETRIEVAL_TOP_K")
     retrieval_similarity_threshold: float = Field(default=0.35, validation_alias="RETRIEVAL_SIMILARITY_THRESHOLD")

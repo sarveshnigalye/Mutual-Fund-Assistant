@@ -14,7 +14,6 @@ import time
 from datetime import datetime
 from typing import Any, Dict, List, Optional
 from bs4 import BeautifulSoup
-from selenium import webdriver
 
 from app.config import settings
 from app.ingestion.snapshot import IST, ist_today
@@ -133,8 +132,12 @@ class GrowwScraper:
         os.makedirs(self.raw_cache_dir, exist_ok=True)
         self.failures: List[Dict[str, str]] = []
 
-    def _create_driver(self) -> webdriver.Remote:
+    def _create_driver(self) -> Any:
         """Instantiates a headless Chromium or Edge driver based on configuration."""
+        # Imported here, not at module level: the API imports this module (via the chunker) but never
+        # scrapes, so the deployed app does not need Selenium installed (requirements-ingest.txt).
+        from selenium import webdriver
+
         browser_type = settings.browser_type.lower()
         driver_path = (settings.chrome_driver_path or "auto").strip()
 

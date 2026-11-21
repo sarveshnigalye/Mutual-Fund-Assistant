@@ -24,9 +24,31 @@ from app.config import settings
 # India has no DST, so a fixed offset is exact and avoids needing tzdata on Windows.
 IST = timezone(timedelta(hours=5, minutes=30), name="IST")
 
-LIVE_CHROMA_PATH = "data/chroma"
-LIVE_VECTORSTORE_PATH = "data/vectorstore"
-LIVE_METADATA_PATH = "data/metadata.json"
+# Layout *inside* a published snapshot (the data-snapshot branch tree / workflow artifact).
+# Fixed: publishers write it, every host's sync reads it.
+SNAPSHOT_CHROMA_PATH = "data/chroma"
+SNAPSHOT_VECTORSTORE_PATH = "data/vectorstore"
+SNAPSHOT_METADATA_PATH = "data/metadata.json"
+
+
+# Where *this host* serves from. Defaults equal the snapshot layout (repo checkout); a hosted
+# deployment points them at its persistent volume, e.g. VECTORSTORE_PATH=/data/vectorstore.
+def live_vectorstore_path() -> str:
+    return os.path.normpath(settings.vectorstore_path)
+
+
+def live_chroma_path() -> str:
+    return os.path.normpath(settings.chroma_db_path)
+
+
+def live_metadata_path() -> str:
+    return os.path.normpath(settings.data_metadata_path)
+
+
+def live_data_root() -> str:
+    """Directory holding the live vectorstore: temp dirs go here so swaps are same-disk renames."""
+    return os.path.dirname(os.path.abspath(live_vectorstore_path()))
+
 
 STAGING_CHROMA_PATH = "data/chroma_staging"
 STAGING_VECTORSTORE_PATH = "data/vectorstore_staging"
@@ -99,6 +121,34 @@ def snapshot_version(path: Optional[str] = None) -> Optional[str]:
     if not meta:
         return None
     return str(meta.get("generated_at") or meta.get("scrape_date") or "") or None
+
+
+# Libraries whose pickled objects are inside a snapshot (joblib dumps of the TF-IDF vectorizer,
+# matrix and BM25 model). The host loading a snapshot should run the same versions.
+PICKLE_LIBRARIES = ("scikit-learn", "rank-bm25", "numpy", "scipy", "joblib")
+
+
+def library_versions() -> Dict[str, str]:
+    from importlib import metadata as md
+
+    versions = {}
+    for name in PICKLE_LIBRARIES:
+        try:
+            versions[name] = md.version(name)
+        except md.PackageNotFoundError:
+            pass
+    return versions
+
+
+def library_mismatches(meta: Optional[Dict[str, Any]]) -> Dict[str, tuple]:
+    """{library: (built_with, installed)} for libraries whose versions differ from the snapshot's."""
+    built = (meta or {}).get("library_versions") or {}
+    installed = library_versions()
+    return {
+        name: (built[name], installed.get(name))
+        for name in built
+        if name in ("scikit-learn", "rank-bm25") and built[name] != installed.get(name)
+    }
 
 
 def append_summary(path: Optional[str], markdown: str) -> None:

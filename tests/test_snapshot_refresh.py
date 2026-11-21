@@ -220,7 +220,7 @@ def test_sync_data_changes_nothing_when_chroma_is_locked(tmp_path, monkeypatch):
     real_replace = snapshot.replace_dir
 
     def locked(src, dst):
-        if os.path.normpath(dst) == os.path.normpath(snapshot.LIVE_CHROMA_PATH):
+        if os.path.normpath(dst) == os.path.normpath(snapshot.live_chroma_path()):
             raise PermissionError("[WinError 5] Access is denied")
         return real_replace(src, dst)
 
@@ -256,7 +256,21 @@ def test_chroma_store_close_releases_client(tmp_path):
     store.upsert_chunks([{"chunk_id": "a", "text": "x"}], [[1.0, 0.0]])
     store.close()
     assert not store.is_ready() and store.search([1.0, 0.0]) == []
-    shutil.rmtree(tmp_path / "chroma")  # handles released: the directory can be removed/replaced
+    # Handles are released shortly after close() (Windows reports the sqlite file busy for a moment
+    # while chromadb's background work winds down) — snapshot.replace_dir retries for the same reason.
+    # A real leak keeps the file locked for the life of the process and fails this loop.
+    import gc
+    import time
+
+    for attempt in range(20):
+        gc.collect()
+        try:
+            shutil.rmtree(tmp_path / "chroma")
+            break
+        except PermissionError:
+            if attempt == 19:
+                raise
+            time.sleep(0.5)
     reopened = ChromaVectorStore(persist_directory=str(tmp_path / "chroma"), collection_name="t_close")
     assert reopened.is_ready() and reopened.count() == 0
     reopened.close()

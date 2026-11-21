@@ -31,6 +31,7 @@ STAGES = [
     ("ingest", "Scrape → normalize → clean → chunk → embed → store (staging)"),
     ("validate", "Validation gate"),
     ("publish", "Promote staging and publish snapshot"),
+    ("notify", "Notify the deployed app (Railway) to load the snapshot"),
 ]
 
 

@@ -1,14 +1,18 @@
 """FastAPI application entrypoint for Mutual Fund FAQ Assistant."""
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from app.api.admin import router as admin_router
+from app.api.limits import RequestLimitsMiddleware
 from app.api.routes import router
 from app.chat.manager import chat_manager
 from app.config import settings
 from app.core.rag_pipeline import rag_pipeline
+from app.ingestion import sync
 
 logging.basicConfig(
     level=logging.INFO,
@@ -38,9 +42,28 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.warning(f"Vector index warm-up warning: {e}")
 
+    # Safety net for hosted deployments: if the workflow's refresh call was missed, pick up the
+    # published snapshot on a timer (SNAPSHOT_POLL_HOURS; 0 = off). Cheap when nothing changed:
+    # one small GitHub request for metadata.json.
+    poller = None
+    if settings.snapshot_repo and settings.snapshot_poll_hours > 0:
+        poller = asyncio.create_task(_poll_snapshots(settings.snapshot_poll_hours * 3600))
+        logger.info(f"Snapshot poll every {settings.snapshot_poll_hours} h from {settings.snapshot_repo}.")
+
     yield
 
+    if poller:
+        poller.cancel()
     logger.info("Shutting down Mutual Fund FAQ Assistant API.")
+
+
+async def _poll_snapshots(interval_seconds: float) -> None:
+    while True:
+        await asyncio.sleep(interval_seconds)
+        try:
+            await asyncio.to_thread(sync.sync_configured)
+        except Exception as e:  # never let the poller die
+            logger.error(f"Snapshot poll failed: {e}")
 
 
 app = FastAPI(
@@ -68,8 +91,12 @@ import os
 from fastapi.responses import FileResponse, JSONResponse
 from fastapi import Request
 
+# Body-size limit + per-IP rate limit on /api/chat (RATE_LIMIT_PER_MINUTE, 0 = off)
+app.add_middleware(RequestLimitsMiddleware)
+
 # Include API routes
 app.include_router(router)
+app.include_router(admin_router)  # /api/admin/* — 404 unless REFRESH_TOKEN is set
 
 
 @app.get("/", tags=["Root"])
