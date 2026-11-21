@@ -4,6 +4,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app.main import app
+from tests.markers import requires_index, requires_llm
 
 client = TestClient(app)
 
@@ -69,6 +70,8 @@ def test_chat_endpoint_empty_query():
     assert res.status_code == 400
 
 
+@requires_index
+@requires_llm
 def test_chat_endpoint_factual_query_roundtrip():
     # 1. Create a clean thread
     res_t = client.post("/api/threads", json={"title": "Factual Test Chat"})

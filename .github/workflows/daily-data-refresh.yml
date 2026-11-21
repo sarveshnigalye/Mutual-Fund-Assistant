@@ -37,9 +37,9 @@ jobs:
       # Job-level because a step's `if:` can't see its own `env:` and `secrets` isn't allowed in `if:`.
       RAILWAY_REFRESH_URL: ${{ secrets.RAILWAY_REFRESH_URL }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -86,7 +86,7 @@ jobs:
 
       - name: Upload data for debugging
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: data-snapshot-${{ github.run_id }}
           path: |
