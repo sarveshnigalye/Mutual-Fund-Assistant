@@ -6,6 +6,7 @@ from app.core.retriever import (
     detect_scheme_name,
     detect_external_amc,
 )
+from tests.markers import requires_index
 
 
 def test_detect_scheme_name():
@@ -24,8 +25,9 @@ def test_detect_external_amc():
     assert detect_external_amc("What is HDFC Mid Cap expense ratio?") is None
 
 
+@requires_index
 def test_retriever_successful_query():
-    retriever = MutualFundRetriever(vectorstore_dir="data/vectorstore")
+    retriever = MutualFundRetriever()
     assert retriever.load() is True
 
     results = retriever.retrieve("What is the expense ratio for HDFC Mid-Cap Opportunities Fund?", top_k=3)
@@ -38,8 +40,9 @@ def test_retriever_successful_query():
     assert top_chunk["similarity_score"] > 0.20
 
 
+@requires_index
 def test_retriever_external_amc_rejection():
-    retriever = MutualFundRetriever(vectorstore_dir="data/vectorstore")
+    retriever = MutualFundRetriever()
     assert retriever.load() is True
 
     # Pure external query without HDFC context should yield no results
@@ -47,8 +50,9 @@ def test_retriever_external_amc_rejection():
     assert len(results) == 0
 
 
+@requires_index
 def test_retriever_gibberish_query():
-    retriever = MutualFundRetriever(vectorstore_dir="data/vectorstore")
+    retriever = MutualFundRetriever()
     assert retriever.load() is True
 
     results = retriever.retrieve("qwerty asdfgh zxcvbn completely irrelevant", top_k=3)

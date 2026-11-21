@@ -6,6 +6,7 @@ import pytest
 from app.core.classifier import QueryCategory, query_classifier
 from app.core.formatter import split_sentences
 from app.core.generator import rag_pipeline
+from tests.markers import requires_index, requires_llm
 
 
 def test_t05_prompt_injection_advisory():
@@ -29,6 +30,8 @@ def test_t06_t07_t08_pii_rejections():
         assert "⚠️ Please do not share personal information" in res["response"]
 
 
+@requires_index
+@requires_llm
 def test_t09_factual_accuracy_and_format_constraints():
     query = "Expense ratio of HDFC Mid Cap?"
     res = rag_pipeline.run(query)

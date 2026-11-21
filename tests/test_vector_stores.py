@@ -3,9 +3,11 @@
 from unittest.mock import MagicMock, patch
 import pytest
 
+from app.config import settings
 from app.ingestion.chroma_store import ChromaVectorStore
 from app.ingestion.indexer import VectorIndexer
 from app.ingestion.pinecone_store import PineconeVectorStore
+from tests.markers import requires_index
 
 
 def test_pinecone_unconfigured_initialization():
@@ -74,9 +76,10 @@ def test_chroma_unconfigured_initialization(tmp_path):
         assert store.upsert_chunks([], []) == 0
 
 
+@requires_index
 def test_vector_indexer_hybrid_local_search():
     """Verify local hybrid indexer search continues to operate at sub-millisecond speeds."""
-    indexer = VectorIndexer(vectorstore_dir="data/vectorstore")
+    indexer = VectorIndexer(vectorstore_dir=settings.vectorstore_path)
     assert indexer.load() is True
     results = indexer.search("What is the exit load for HDFC Mid Cap?", top_k=3)
     assert len(results) > 0
