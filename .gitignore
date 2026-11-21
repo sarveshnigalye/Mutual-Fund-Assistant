@@ -35,6 +35,7 @@ data/*.old-*/
 *.log
 
 # IDE & OS
+.claude/
 .vscode/
 .idea/
 .DS_Store
