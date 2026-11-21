@@ -1,9 +1,12 @@
 """Phase 7.8–7.10 — snapshot promotion, app-side sync, hot reload and the footer date."""
 
+import datetime
 import importlib.util
 import json
 import os
 import shutil
+import subprocess
+import sys
 
 import pytest
 
@@ -184,3 +187,76 @@ def test_report_failure_names_the_failing_stage():
     steps = {"setup": {"outcome": "success"}, "ingest": {"outcome": "success"}, "validate": {"outcome": "failure"}}
     assert report.failing_stage(json.dumps(steps)) == "Validation gate"
     assert report.failing_stage("") == "Unknown step (see the run log)"
+
+
+# ------------------------------------------------------------------------------
+# Code-review regressions
+# ------------------------------------------------------------------------------
+def test_reload_of_corrupt_snapshot_keeps_serving(tmp_path):
+    live, meta = tmp_path / "vectorstore", tmp_path / "metadata.json"
+    build_index(live, "0.60%")
+    snapshot.write_json_atomic(str(meta), {"generated_at": "v1"})
+    retriever = MutualFundRetriever(vectorstore_dir=str(live), metadata_path=str(meta), reload_check_seconds=0)
+    assert retriever.load()
+
+    (live / "corpus.json").write_text('[{"truncated": ', encoding="utf-8")  # VectorIndexer.load() raises
+    snapshot.write_json_atomic(str(meta), {"generated_at": "v2"})
+    assert retriever.load()  # no exception reaches the request
+    assert retriever.snapshot_version == "v1"
+    assert "0.60%" in top_text(retriever)
+
+
+def test_sync_data_changes_nothing_when_chroma_is_locked(tmp_path, monkeypatch):
+    sync_data = load_script("sync_data")
+    app_dir, artifact = tmp_path / "app", tmp_path / "artifact"
+    (app_dir / "data" / "vectorstore").mkdir(parents=True)
+    (app_dir / "data" / "vectorstore" / "old.txt").write_text("old")
+    (app_dir / "data" / "metadata.json").write_text(json.dumps({"generated_at": "g1"}))
+    make_snapshot_dir(artifact, "g2")
+    (artifact / "data" / "chroma").mkdir()
+    (artifact / "data" / "chroma" / "chroma.sqlite3").write_text("db")
+    monkeypatch.chdir(app_dir)
+
+    real_replace = snapshot.replace_dir
+
+    def locked(src, dst):
+        if os.path.normpath(dst) == os.path.normpath(snapshot.LIVE_CHROMA_PATH):
+            raise PermissionError("[WinError 5] Access is denied")
+        return real_replace(src, dst)
+
+    monkeypatch.setattr(sync_data.snapshot, "replace_dir", locked)
+    with pytest.raises(SystemExit, match="nothing was changed"):
+        sync_data.main(["--from-dir", str(artifact)])
+    assert os.listdir("data/vectorstore") == ["old.txt"]
+    assert snapshot.read_metadata("data/metadata.json")["generated_at"] == "g1"
+
+
+def test_validate_require_fresh_allows_a_run_that_crossed_midnight():
+    validate = load_script("validate_index")
+    today = snapshot.ist_now().date()
+    assert validate.check_fresh(today.isoformat()) == []
+    assert validate.check_fresh((today - datetime.timedelta(days=1)).isoformat()) == []
+    assert validate.check_fresh((today - datetime.timedelta(days=3)).isoformat())
+    assert validate.check_fresh("not-a-date")
+
+
+def test_report_failure_needs_only_the_standard_library():
+    # -S: no site-packages, as when `pip install` itself failed in the workflow
+    script = os.path.join(ROOT, "scripts", "report_failure.py")
+    proc = subprocess.run([sys.executable, "-S", script, "--help"], capture_output=True, text=True)
+    assert proc.returncode == 0, proc.stderr
+
+
+def test_chroma_store_close_releases_client(tmp_path):
+    from app.ingestion.chroma_store import ChromaVectorStore
+
+    store = ChromaVectorStore(persist_directory=str(tmp_path / "chroma"), collection_name="t_close")
+    if not store.is_ready():
+        pytest.skip("chromadb not usable here")
+    store.upsert_chunks([{"chunk_id": "a", "text": "x"}], [[1.0, 0.0]])
+    store.close()
+    assert not store.is_ready() and store.search([1.0, 0.0]) == []
+    shutil.rmtree(tmp_path / "chroma")  # handles released: the directory can be removed/replaced
+    reopened = ChromaVectorStore(persist_directory=str(tmp_path / "chroma"), collection_name="t_close")
+    assert reopened.is_ready() and reopened.count() == 0
+    reopened.close()

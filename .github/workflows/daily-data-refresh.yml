@@ -62,7 +62,7 @@ jobs:
         run: >-
           python scripts/validate_index.py --staging
           --previous origin/data-snapshot
-          --require-today --require-chroma
+          --require-fresh --require-chroma
           --summary "$GITHUB_STEP_SUMMARY"
 
       - name: Promote staging and publish snapshot

@@ -20,7 +20,9 @@ data/vectorstore/
 data/chroma/
 data/chat.db
 data/raw/
-# Phase 7 staging build & sync temp dirs (published to the data-snapshot branch, never to main)
+# Phase 7 snapshot files: rewritten by every refresh/sync and published to the data-snapshot
+# branch, never to main (a tracked copy would dirty every app host's checkout after a sync)
+data/metadata.json
 data/vectorstore_staging/
 data/chroma_staging/
 data/metadata_staging.json

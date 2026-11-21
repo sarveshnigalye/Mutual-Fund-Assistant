@@ -124,9 +124,11 @@ class ScrapedDocument:
 class GrowwScraper:
     """Automates headless browser scraping of Groww mutual fund scheme pages."""
 
-    def __init__(self, raw_cache_dir: str = "data/raw"):
+    def __init__(self, raw_cache_dir: str = "data/raw", run_date: Optional[str] = None):
         # Audit copies only — never read back (Phase 7.2).
         self.raw_cache_dir = raw_cache_dir
+        # One date for the whole run, so a run that crosses midnight IST is not split across two days
+        self.run_date = run_date or ist_today()
         os.makedirs(self.raw_cache_dir, exist_ok=True)
         self.failures: List[Dict[str, str]] = []
 
@@ -175,8 +177,10 @@ class GrowwScraper:
         try:
             from selenium.webdriver.support.ui import WebDriverWait
 
+            # innerText is what has actually rendered; page_source would also match markup or
+            # JSON state shipped in the server HTML before the widgets are drawn.
             WebDriverWait(driver, PAGE_READY_TIMEOUT_SECONDS).until(
-                lambda d: READY_MARKER in (d.page_source or "").lower()
+                lambda d: READY_MARKER in (d.execute_script("return document.body ? document.body.innerText : ''") or "").lower()
             )
         except Exception as e:  # TimeoutException or a driver hiccup
             logger.warning(f"Fund data marker not seen within {PAGE_READY_TIMEOUT_SECONDS}s: {e}")
@@ -192,7 +196,7 @@ class GrowwScraper:
         scheme_name = target.get("scheme_name", scheme_id)
         category = target.get("category", "Mutual Fund")
         amc = target.get("amc", "HDFC Mutual Fund")
-        scrape_date = ist_today()
+        scrape_date = self.run_date
 
         raw_audit_path = os.path.join(self.raw_cache_dir, f"{scheme_id}.html")
 
@@ -206,7 +210,7 @@ class GrowwScraper:
                 driver.set_page_load_timeout(30)
                 driver.get(url)
                 self._wait_for_fund_data(driver)
-                time.sleep(settings.scrape_delay_seconds)  # let late JS widgets settle
+                time.sleep(settings.scrape_delay_seconds + 3)  # let late JS widgets settle (as before Phase 7)
                 html = driver.page_source
 
                 if len(html) < 2000:
@@ -415,7 +419,7 @@ class GrowwScraper:
                     raise BlockedPageError(f"Bot-block / CAPTCHA page detected (matched '{marker}')")
                 doc = self._parse_html(
                     html, scheme_id, target.get("scheme_name", scheme_id), target.get("category", "Mutual Fund"),
-                    target["url"], target.get("amc", "HDFC Mutual Fund"), ist_today(),
+                    target["url"], target.get("amc", "HDFC Mutual Fund"), self.run_date,
                 )
                 doc.page_sha256 = sha256_text(visible_text(html))
                 documents.append(doc)

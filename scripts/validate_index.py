@@ -1,7 +1,7 @@
 """Validation gate for a freshly built index (Phase 7.7).
 
     python scripts/validate_index.py --staging --previous origin/data-snapshot \
-        --require-today --require-chroma --summary "$GITHUB_STEP_SUMMARY"
+        --require-fresh --require-chroma --summary "$GITHUB_STEP_SUMMARY"
 
 FAILS (exit 1, blocks publishing) on: a page failure recorded by ingestion (scrape error,
 CAPTCHA, cleaner rejection); a missing scheme; a scheme with < 5 chunks; no Key Facts chunk;
@@ -18,6 +18,7 @@ a passing marker for the same build.
 """
 
 import argparse
+import datetime
 import json
 import os
 import subprocess
@@ -49,6 +50,18 @@ def _git_show_json(ref: str, path: str):
         return json.loads(out.stdout.decode("utf-8"))
     except Exception:
         return None
+
+
+def check_fresh(scrape_date) -> list:
+    """The run's date must be today or yesterday in IST (a refresh that started before midnight)."""
+    today = snapshot.ist_now().date()
+    try:
+        run_day = datetime.date.fromisoformat(str(scrape_date))
+    except ValueError:
+        return [f"Run scrape_date `{scrape_date}` is not a valid date."]
+    if not 0 <= (today - run_day).days <= 1:
+        return [f"Run scrape_date {run_day} is not today or yesterday ({today}); the build is stale."]
+    return []
 
 
 def check_chroma(chroma_path: str, collection: str, expected: int, required: bool) -> list:
@@ -100,7 +113,8 @@ def main(argv=None) -> int:
     p.add_argument("--chroma-collection")
     p.add_argument("--urls", default="data/urls.json")
     p.add_argument("--previous", default="", help="git ref of the previous snapshot, e.g. origin/data-snapshot")
-    p.add_argument("--require-today", action="store_true", help="scrape_date must be today's IST date")
+    p.add_argument("--require-fresh", action="store_true",
+                   help="the run's scrape_date must be today or yesterday (IST); allows a run that crosses midnight")
     p.add_argument("--require-chroma", action="store_true", help="fail if the ChromaDB store is missing")
     p.add_argument("--skip-tests", action="store_true", help="do not run the Phase 6 regression tests")
     p.add_argument("--summary", default="", help="markdown file to append the report to")
@@ -126,9 +140,11 @@ def main(argv=None) -> int:
     metadata = _load_json(metadata_path)
     expected = load_expected_schemes(args.urls)
     run_id = (metadata or {}).get("run_id")
-    expected_date = snapshot.ist_today() if args.require_today else None
-
-    result = validate_corpus(corpus, metadata, expected, expected_date=expected_date, expected_run_id=run_id)
+    # Every chunk must carry the run's own scrape_date (checked inside validate_corpus); the run's
+    # date itself only has to be recent, so a refresh that crosses midnight IST is not blocked.
+    result = validate_corpus(corpus, metadata, expected, expected_run_id=run_id)
+    if args.require_fresh:
+        result.errors += check_fresh((metadata or {}).get("scrape_date"))
     if corpus:
         result.errors += check_chroma(chroma_path, collection, len(corpus), args.require_chroma)
 

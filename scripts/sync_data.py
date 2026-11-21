@@ -63,14 +63,18 @@ def install(src_root: str) -> dict:
     if not os.path.isfile(os.path.join(src_data, "vectorstore", "corpus.json")):
         raise SystemExit("Snapshot has no data/vectorstore/corpus.json.")
 
-    snapshot.replace_dir(os.path.join(src_data, "vectorstore"), snapshot.LIVE_VECTORSTORE_PATH)
+    # Chroma first: it is the swap that can fail (Windows locks the sqlite file while a backend with
+    # VECTOR_DB_PROVIDER=chromadb runs). If it does, nothing live has changed and we exit non-zero,
+    # so the TF-IDF index and ChromaDB never end up on different snapshots.
     if os.path.isdir(os.path.join(src_data, "chroma")):
         try:
             snapshot.replace_dir(os.path.join(src_data, "chroma"), snapshot.LIVE_CHROMA_PATH)
         except PermissionError as e:
-            # Windows: a backend running with VECTOR_DB_PROVIDER=chromadb holds the sqlite file open.
-            print(f"⚠️ Could not replace {snapshot.LIVE_CHROMA_PATH} ({e}). The TF-IDF index was updated; "
-                  "stop the backend and re-run with --force to update ChromaDB too.")
+            raise SystemExit(
+                f"❌ Could not replace {snapshot.LIVE_CHROMA_PATH} ({e}); nothing was changed. "
+                "Stop the backend (it holds ChromaDB open) and run sync_data.py again."
+            )
+    snapshot.replace_dir(os.path.join(src_data, "vectorstore"), snapshot.LIVE_VECTORSTORE_PATH)
     snapshot.write_json_atomic(snapshot.LIVE_METADATA_PATH, new_meta)  # last: triggers the reload
     return new_meta
 

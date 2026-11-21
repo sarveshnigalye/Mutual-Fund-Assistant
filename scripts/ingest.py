@@ -73,6 +73,7 @@ def run_ingestion(
     offline_html: str = "",
 ) -> bool:
     started = time.time()
+    run_date = snapshot.ist_today()  # stamped once: every chunk of this run carries the same scrape_date
     run_id = run_id or os.getenv("GITHUB_RUN_ID") or f"local-{snapshot.ist_now().strftime('%Y%m%dT%H%M%S')}"
     if staging:
         vectorstore_dir = snapshot.STAGING_VECTORSTORE_PATH
@@ -108,7 +109,7 @@ def run_ingestion(
     failures: list = []
 
     with _stage(timings, "scrape"):
-        scraper = GrowwScraper(raw_cache_dir=raw_dir)
+        scraper = GrowwScraper(raw_cache_dir=raw_dir, run_date=run_date)
         if offline_html:
             logger.warning(f"OFFLINE MODE: parsing saved pages from {offline_html} (development only)")
             docs = scraper.parse_saved_pages(offline_html, urls_file=urls_path)

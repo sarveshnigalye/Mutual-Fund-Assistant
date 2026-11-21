@@ -8,7 +8,7 @@ import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.config import settings
-from app.ingestion.chroma_store import clear_client_cache
+
 from app.ingestion.indexer import VectorIndexer
 from app.ingestion.snapshot import snapshot_version
 
@@ -142,10 +142,19 @@ class MutualFundRetriever:
     def reload(self, version: Optional[str] = None) -> bool:
         """Loads the index from disk into a fresh indexer and swaps it in on success."""
         version = version or snapshot_version(self.metadata_path)
-        if settings.vector_db_provider == "chromadb":
-            clear_client_cache()  # the chroma directory may have been replaced underneath us
-        fresh = VectorIndexer(vectorstore_dir=self.vectorstore_dir)
-        if not fresh.load():
+        old = self.indexer
+        if old.chroma_store is not None:
+            # chromadb caches one client per path: the old one must be released (closing its file
+            # handles) or the new indexer would be handed the client for the replaced directory.
+            # Requests still in flight on it fall back to TF-IDF (ChromaVectorStore.search -> []).
+            old.chroma_store.close()
+        try:
+            fresh = VectorIndexer(vectorstore_dir=self.vectorstore_dir)
+            loaded = fresh.load()
+        except Exception as e:  # truncated corpus.json, pickle from another scikit-learn, ...
+            logger.error(f"Snapshot {version} failed to load ({type(e).__name__}: {e}).")
+            loaded = False
+        if not loaded:
             logger.warning(f"Snapshot {version} could not be loaded; still serving {self._snapshot_version}.")
             return False
         self.indexer = fresh

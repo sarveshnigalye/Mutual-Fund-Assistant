@@ -6,6 +6,7 @@
     python scripts/report_failure.py --resolve --run-url URL
 
 Never fails the job itself: an alerting problem is printed, and the exit code is 0.
+Standard library only, so it still works when the failing step was `pip install`.
 """
 
 import argparse
@@ -13,13 +14,13 @@ import json
 import os
 import subprocess
 import sys
+from datetime import datetime, timedelta, timezone
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, ROOT)
-if __name__ == "__main__":
-    os.chdir(ROOT)
-
-from app.ingestion import snapshot
+IST = timezone(timedelta(hours=5, minutes=30))
+# Same paths as app/ingestion/snapshot.py (not imported: it needs the project's dependencies)
+STAGING_METADATA_PATH = os.path.join(ROOT, "data", "metadata_staging.json")
+VALIDATION_MARKER_PATH = os.path.join(ROOT, "data", "validation_staging.json")
 
 LABEL = "data-refresh-failure"
 TITLE = "Daily data refresh failed"
@@ -40,6 +41,15 @@ def _gh(args, input_text=None) -> str:
     return proc.stdout.strip()
 
 
+def _read_json(path: str) -> dict:
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
 def failing_stage(steps_json: str) -> str:
     try:
         steps = json.loads(steps_json or "{}")
@@ -53,10 +63,10 @@ def failing_stage(steps_json: str) -> str:
 
 def failure_details() -> list:
     lines = []
-    meta = snapshot.read_metadata(snapshot.STAGING_METADATA_PATH) or {}
+    meta = _read_json(STAGING_METADATA_PATH)
     for f in meta.get("failures") or []:
         lines.append(f"- `{f.get('scheme_id')}` failed at **{f.get('stage')}**: {f.get('error')}")
-    marker = snapshot.read_metadata(snapshot.VALIDATION_MARKER_PATH) or {}
+    marker = _read_json(VALIDATION_MARKER_PATH)
     for e in marker.get("errors") or []:
         lines.append(f"- {e}")
     return lines
@@ -73,7 +83,7 @@ def report(run_url: str, steps_json: str) -> None:
     body = "\n".join([
         f"**Failed stage:** {stage}",
         f"**Run:** {run_url}",
-        f"**When:** {snapshot.ist_now().strftime('%Y-%m-%d %H:%M')} IST",
+        f"**When:** {datetime.now(IST).strftime('%Y-%m-%d %H:%M')} IST",
         "",
         "The previous snapshot is still live; users keep getting answers from it.",
         *(["", "**Details**", *details] if details else []),

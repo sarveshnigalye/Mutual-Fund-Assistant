@@ -106,6 +106,22 @@ class PineconeVectorStore:
         logger.info(f"Successfully upserted {total_upserted} chunks into Pinecone.")
         return total_upserted
 
+    def replace_all_chunks(self, chunks: List[Dict[str, Any]], vectors: List[List[float]]) -> int:
+        """Makes the index hold exactly `chunks`: clears it, then upserts.
+
+        Chunk IDs are deterministic but sections can shrink or disappear, and the TF-IDF space is
+        refit every run, so leftover vectors would be stale. While the index is being refilled,
+        VectorIndexer.search falls back to the local hybrid store.
+        """
+        if not self.is_ready():
+            logger.warning("Pinecone is not ready. Skipping cloud sync.")
+            return 0
+        try:
+            self.index.delete(delete_all=True)
+        except Exception as e:  # an empty index / namespace raises on some client versions
+            logger.info(f"Pinecone delete_all skipped: {e}")
+        return self.upsert_chunks(chunks, vectors)
+
     def search(
         self,
         query_vector: List[float],

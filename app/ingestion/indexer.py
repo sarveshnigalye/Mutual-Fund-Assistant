@@ -99,7 +99,7 @@ class VectorIndexer:
         # 4. Optional cloud / embedded database sync (Pinecone / ChromaDB)
         if self.pinecone_store and self.pinecone_store.is_ready():
             dense_vectors = self.embedder.tfidf_matrix.toarray().tolist()
-            self.pinecone_store.upsert_chunks(self.chunks, dense_vectors)
+            self.pinecone_store.replace_all_chunks(self.chunks, dense_vectors)
 
         if self.chroma_store and self.chroma_store.is_ready():
             dense_vectors = self.embedder.tfidf_matrix.toarray().tolist()

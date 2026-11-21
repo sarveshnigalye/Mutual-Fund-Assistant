@@ -71,6 +71,20 @@ class ChromaVectorStore:
         """Returns True if ChromaDB is available and collection is initialized."""
         return self.client is not None and self.collection is not None
 
+    def close(self) -> None:
+        """Releases the client and its file handles (needed before the directory is replaced)."""
+        client, self.client, self.collection = self.client, None, None
+        if client is None:
+            return
+        try:
+            close = getattr(client, "close", None)  # chromadb >= 1.x: refcounted System.stop()
+            if callable(close):
+                close()
+            else:
+                clear_client_cache()
+        except Exception as e:
+            logger.debug(f"Error while closing ChromaDB client: {e}")
+
     def count(self) -> int:
         return self.collection.count() if self.is_ready() else 0
 
