@@ -53,7 +53,8 @@ def test_formatter_edge_case_many_sentences_capped_at_three():
 
 
 def test_formatter_edge_case_missing_url():
-    # When source_url is empty, no "📎 Source:" line should be added
+    # edge-cases.md §6.5: missing chunk source_url defaults to the HDFC AMC website,
+    # so every factual answer still carries exactly one citation (Phase 6 acceptance criterion)
     raw = "The minimum SIP amount for HDFC Top 100 Fund is ₹100."
     formatted = format_response(
         raw_response=raw,
@@ -61,8 +62,31 @@ def test_formatter_edge_case_missing_url():
         scrape_date="2026-10-25",
     )
     assert "The minimum SIP amount for HDFC Top 100 Fund is ₹100." in formatted
-    assert "📎 Source:" not in formatted
+    assert formatted.count("📎 Source:") == 1
+    assert "📎 Source: https://www.hdfcfund.com" in formatted
     assert "_Last updated from sources: 2026-10-25_" in formatted
+
+
+def test_formatter_strips_llm_urls_and_disclaimers():
+    raw = (
+        "The exit load is 1% if redeemed within 1 year. See https://example.com/exit-load for details. "
+        "This is not financial advice."
+    )
+    formatted = format_response(
+        raw_response=raw,
+        source_url="https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth",
+        scrape_date="2026-10-25",
+    )
+    assert "example.com" not in formatted
+    assert "not financial advice" not in formatted.lower()
+    assert formatted.count("https://") == 1
+    assert "The exit load is 1% if redeemed within 1 year." in formatted
+
+
+def test_formatter_missing_scrape_date_defaults():
+    formatted = format_response("The benchmark is NIFTY 100 TRI.", "https://groww.in/x", scrape_date=None)
+    assert "_Last updated from sources: 2026-10-25_" in formatted
+    assert "None" not in formatted
 
 
 def test_format_response_pii_safety_net():

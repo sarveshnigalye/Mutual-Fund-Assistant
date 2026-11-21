@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api.routes import router
 from app.chat.manager import chat_manager
 from app.config import settings
-from app.core.retriever import MutualFundRetriever
+from app.core.rag_pipeline import rag_pipeline
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,10 +29,9 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         logger.error(f"Failed to initialize chat database: {e}")
 
-    # Warm up Vector Index
+    # Warm up the vector index used by the shared RAG pipeline
     try:
-        retriever = MutualFundRetriever()
-        if retriever.load():
+        if rag_pipeline.retriever.load():
             logger.info("Vector index loaded successfully.")
         else:
             logger.warning("Vector index not found. Run 'scripts/ingest.py' to populate.")
@@ -54,12 +53,12 @@ app = FastAPI(
 # CORS configuration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
+    allow_origins=sorted({
         f"http://localhost:{settings.streamlit_port}",
+        f"http://127.0.0.1:{settings.streamlit_port}",
         "http://localhost:8501",
         "http://127.0.0.1:8501",
-        "*",
-    ],
+    }),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

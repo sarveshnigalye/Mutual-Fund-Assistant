@@ -36,25 +36,35 @@ def send_chat_message(request: ChatRequest):
             detail="Query string cannot be empty.",
         )
 
-    # 1. Resolve or create thread
+    # 1. Resolve thread (404 for unknown IDs) or auto-create when none is given
     thread_id = request.thread_id
-    thread = None
     if thread_id:
         thread = chat_manager.get_thread(thread_id)
-
-    if not thread:
+        if not thread:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Thread '{thread_id}' not found.",
+            )
+    else:
         thread = chat_manager.create_thread(title="New Chat")
         thread_id = thread.thread_id
 
-    # 2. Persist user message
-    user_msg = chat_manager.add_message(
+    # 2. Execute RAG pipeline (edge-cases.md §9.5: never surface a raw 500 / traceback)
+    try:
+        rag_result = rag_pipeline.run(query)
+    except Exception:
+        logger.exception("RAG pipeline failed for query in thread %s", thread_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Something went wrong. Please try again.",
+        )
+
+    # 3. Persist user message, then the assistant answer
+    chat_manager.add_message(
         thread_id=thread_id,
         role="user",
         content=query,
     )
-
-    # 3. Execute RAG pipeline
-    rag_result = rag_pipeline.run(query)
 
     response_text = rag_result.get("response", "")
     source_url = rag_result.get("source_url") or None
@@ -76,8 +86,10 @@ def send_chat_message(request: ChatRequest):
     return ChatResponse(
         thread_id=thread_id,
         message_id=assistant_msg.message_id,
+        query=query,
         response=response_text,
         source_url=source_url,
+        classification=category,
         category=category,
         is_refusal=is_refusal,
         created_at=assistant_msg.created_at,

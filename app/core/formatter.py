@@ -15,8 +15,14 @@ try:
 except Exception:
     REFUSAL_TEMPLATES = {
         "PII_DETECTED": "⚠️ Please do not share personal information. I do not collect or process personal data.",
-        "FALLBACK": "I don't have verified information on this. Please check the official HDFC AMC website: https://www.hdfcfund.com",
+        "FALLBACK": "I don't have verified information on this. Please check the official HDFC AMC website.",
     }
+
+FALLBACK_TEXT = REFUSAL_TEMPLATES.get(
+    "FALLBACK", "I don't have verified information on this. Please check the official HDFC AMC website."
+)
+FALLBACK_SOURCE_URL = "https://www.hdfcfund.com"
+DEFAULT_SCRAPE_DATE = "2026-10-25"
 
 
 def clean_llm_output(raw_text: str) -> str:
@@ -28,8 +34,28 @@ def clean_llm_output(raw_text: str) -> str:
     text = re.sub(r"<think>[\s\S]*?</think>", "", raw_text, flags=re.IGNORECASE)
 
     # Remove markdown link formatting if LLM hallucinated its own citation line
-    text = re.sub(r"(?i)\n*(?:source|citation|reference):\s*https?://\S+", "", text)
+    text = re.sub(r"(?i)\n*(?:source(?:\s+link)?|citation|reference|url):\s*https?://\S+", "", text)
     text = re.sub(r"(?i)\n*📎\s*source:\s*https?://\S+", "", text)
+
+    # Exactly one citation is appended by the system (edge-cases.md §5.9): drop any other URLs
+    text = re.sub(r"\[([^\]]+)\]\(https?://[^)]+\)", r"\1", text)  # markdown links -> label
+    text = re.sub(r"\(?https?://[^\s)]+\)?", "", text)
+    # Tidy phrases orphaned by URL removal ("See  for details.", "visit: .")
+    text = re.sub(
+        r"(?i)\b(?:see|visit|refer\s+to|check(?:\s+out)?)\s*:?\s*(?:for\s+(?:more\s+)?(?:details|information))?\s*[.:]",
+        "",
+        text,
+    )
+    text = re.sub(r"(?i)\b(?:available\s+)?(?:at|here)\s*:\s*(?=[.\s]|$)", "", text)
+
+    # Strip LLM-authored disclaimers; the system footer is the only disclaimer (edge-cases.md §5.5)
+    text = re.sub(
+        r"(?i)[^.!?\n]*\b(?:not\s+(?:a\s+)?financial\s+advi[cs]e|not\s+a\s+financial\s+advisor|"
+        r"consult\s+(?:a|your)\s+financial\s+advisor|mutual\s+fund\s+investments\s+are\s+subject\s+to\s+market\s+risks?)"
+        r"[^.!?\n]*[.!?]?",
+        "",
+        text,
+    )
 
     # Normalize multiple newlines and spaces
     lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
@@ -104,7 +130,9 @@ def format_response(
     cleaned = clean_llm_output(raw_response)
 
     if not cleaned:
-        cleaned = "I don't have verified information on this. Please check the official HDFC AMC website: https://www.hdfcfund.com"
+        # No answer -> the scheme page citation would be misleading; cite the AMC site instead
+        cleaned = FALLBACK_TEXT
+        source_url = FALLBACK_SOURCE_URL
 
     # 2. Split and cap to at most 3 sentences
     sentences = split_sentences(cleaned)
@@ -123,13 +151,13 @@ def format_response(
             "⚠️ Please do not share personal information. I do not collect or process personal data.",
         )
 
-    # 4. Construct citation and footer
+    # 4. Construct citation and footer (missing metadata falls back per edge-cases.md §6.5/§6.6)
     parts = [capped]
 
-    if source_url:
-        parts.append(f"📎 Source: {source_url.strip()}")
+    citation = (source_url or "").strip() or FALLBACK_SOURCE_URL
+    parts.append(f"📎 Source: {citation}")
 
-    date_str = scrape_date or "2026-10-25"
+    date_str = scrape_date or DEFAULT_SCRAPE_DATE
     parts.append(f"_Last updated from sources: {date_str}_")
 
     return "\n\n".join(parts)

@@ -3,5 +3,9 @@
   "COMPARATIVE": "I can only share factual details about individual schemes and cannot compare funds or suggest which is better. You can review each scheme's details on the HDFC AMC website: https://www.hdfcfund.com",
   "PII_DETECTED": "⚠️ Please do not share personal information such as PAN, Aadhaar, account numbers, or contact details. I do not collect or process personal data. For account-related queries, visit: https://www.hdfcfund.com/investor-services",
   "PERFORMANCE": "I cannot provide return calculations or performance comparisons. For official performance data, please refer to the scheme page: {factsheet_link}",
-  "OUT_OF_SCOPE": "This question is outside my scope. I can only answer factual questions about HDFC Mutual Fund schemes. To learn about mutual funds, visit: https://www.amfiindia.com/investor-corner/knowledge-center"
+  "OUT_OF_SCOPE": "This question is outside my scope. I can only answer factual questions about HDFC Mutual Fund schemes. To learn about mutual funds, visit: https://www.amfiindia.com/investor-corner/knowledge-center",
+  "NON_ENGLISH": "I currently support English queries only. Please rephrase your question in English.",
+  "INVALID_INPUT": "Please enter a question about HDFC Mutual Fund schemes, for example: \"What is the exit load for HDFC Small Cap Fund?\"",
+  "NON_INDEXED": "I don't have verified information on this. I only cover five HDFC Mutual Fund schemes, so please check the official website of the relevant fund house.",
+  "FALLBACK": "I don't have verified information on this. Please check the official HDFC AMC website."
 }

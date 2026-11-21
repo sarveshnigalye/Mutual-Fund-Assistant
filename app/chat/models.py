@@ -2,7 +2,7 @@
 
 from datetime import datetime
 from typing import List, Optional
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class MessageBase(BaseModel):
@@ -30,7 +30,15 @@ class ThreadCreate(BaseModel):
 
 
 class ThreadUpdate(BaseModel):
-    title: str = Field(..., description="Updated thread title")
+    title: str = Field(..., min_length=1, max_length=120, description="Updated thread title")
+
+    @field_validator("title")
+    @classmethod
+    def title_not_blank(cls, v: str) -> str:
+        v = v.strip()
+        if not v:
+            raise ValueError("Title cannot be blank.")
+        return v
 
 
 class Thread(ThreadBase):
@@ -49,8 +57,10 @@ class ChatRequest(BaseModel):
 class ChatResponse(BaseModel):
     thread_id: str = Field(..., description="Thread ID")
     message_id: str = Field(..., description="Assistant message UUID")
+    query: str = Field(..., description="Original user query")
     response: str = Field(..., description="Formatted answer or refusal text")
     source_url: Optional[str] = Field(default=None, description="Official cited URL")
-    category: str = Field(default="FACTUAL", description="Classification category")
+    classification: str = Field(default="FACTUAL", description="Classification category (architecture §11.2)")
+    category: str = Field(default="FACTUAL", description="Alias of classification, kept for backward compatibility")
     is_refusal: bool = Field(default=False, description="Whether the answer is a refusal")
     created_at: str = Field(..., description="ISO timestamp")

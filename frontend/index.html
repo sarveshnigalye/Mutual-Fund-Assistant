@@ -1,552 +1,682 @@
 <!DOCTYPE html>
-<html class="dark" lang="en">
+<html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta content="width=device-width, initial-scale=1.0" name="viewport"/>
-  <title>HDFC Mutual Fund Facts-Only Assistant</title>
-  <!-- Fonts -->
-  <link href="https://fonts.googleapis.com" rel="preconnect"/>
-  <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
-  <link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet"/>
-  <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet"/>
-  <!-- Tailwind CSS -->
-  <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
-  <!-- Tailwind Config -->
-  <script id="tailwind-config">
-    tailwind.config = {
-      darkMode: "class",
-      theme: {
-        extend: {
-          "colors": {
-            "surface": "#0b1326",
-            "surface-dim": "#0b1326",
-            "surface-bright": "#31394d",
-            "surface-container-lowest": "#060e20",
-            "surface-container-low": "#131b2e",
-            "surface-container": "#171f33",
-            "surface-container-high": "#222a3d",
-            "surface-container-highest": "#2d3449",
-            "on-surface": "#dae2fd",
-            "on-surface-variant": "#c3c6d7",
-            "outline": "#8d90a0",
-            "outline-variant": "#434655",
-            "primary": "#b4c5ff",
-            "primary-container": "#2563eb",
-            "on-primary-container": "#eeefff",
-            "secondary": "#4edea3",
-            "tertiary": "#ffb95f",
-            "tertiary-container": "#996100",
-            "error": "#ffb4ab"
-          },
-          "fontFamily": {
-            "body-sm": ["Inter"],
-            "body-md": ["Inter"],
-            "headline-lg": ["Geist"],
-            "headline-xl": ["Geist"],
-            "headline-md": ["Geist"],
-            "label-sm": ["JetBrains Mono"],
-            "label-md": ["JetBrains Mono"],
-            "label-lg": ["JetBrains Mono"]
-          }
-        }
-      }
-    }
-  </script>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>HDFC Fund Facts Assistant</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@500;600&display=swap" rel="stylesheet" />
+<style>
+/* ==========================================================================
+   Obsidian Factstream tokens (Docs/stitch_hdfc_fund_facts_assistant/DESIGN.md)
+   ========================================================================== */
+:root {
+  --bg: #0b1326;
+  --bg-rail: #060e20;
+  --surface-low: #131b2e;
+  --surface: #171f33;
+  --surface-high: #222a3d;
+  --surface-highest: #2d3449;
+  --text: #dae2fd;
+  --text-2: #c3c6d7;
+  --muted: #8d90a0;
+  --line: rgba(255, 255, 255, 0.08);
+  --line-strong: rgba(255, 255, 255, 0.14);
+  --primary: #2563eb;
+  --primary-hover: #3b82f6;
+  --primary-text: #b4c5ff;
+  --link: #60a5fa;
+  --verified: #4edea3;
+  --verified-bg: rgba(16, 185, 129, 0.10);
+  --verified-line: rgba(16, 185, 129, 0.30);
+  --amber: #ffb95f;
+  --amber-bg: rgba(245, 158, 11, 0.10);
+  --amber-line: rgba(245, 158, 11, 0.35);
+  --danger: #ffb4ab;
+  --radius: 4px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --rail-w: 300px;
+  --font-head: "Geist", "Inter", system-ui, sans-serif;
+  --font-body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; }
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/22px var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  overflow: hidden; /* the app shell scrolls internally; the page itself never scrolls sideways */
+}
+button, input, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+a { color: var(--link); }
+svg.icon { width: 16px; height: 16px; flex: none; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+/* Single-line label helper: never wraps, never overflows its box */
+.ellipsis { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mono { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+
+/* ==========================================================================
+   App shell: header / [rail | main]
+   ========================================================================== */
+/* Explicit minmax(0,1fr) column: an implicit `auto` track would grow to the min-content width of
+   nowrap labels (e.g. the title) and push the whole app wider than the viewport on phones. */
+.app { height: 100vh; height: 100dvh; display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto auto minmax(0, 1fr); }
+.app > * { min-width: 0; }
+.scrim { display: none; }
+
+.topbar {
+  display: flex; align-items: center; gap: 12px;
+  min-height: 56px; padding: 8px 16px;
+  background: var(--surface-low); border-bottom: 1px solid var(--line);
+}
+.brand { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1 1 auto; }
+.brand-mark {
+  width: 32px; height: 32px; flex: none; border-radius: var(--radius);
+  background: var(--primary); color: #fff; display: grid; place-items: center;
+}
+.brand-title {
+  font: 600 17px/24px var(--font-head); letter-spacing: -0.015em;
+}
+.chip {
+  display: inline-flex; align-items: center; gap: 6px; flex: none;
+  padding: 3px 8px; border-radius: 2px; white-space: nowrap;
+  font: 600 10px/14px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase;
+  border: 1px solid var(--line-strong); background: var(--surface-high); color: var(--primary-text);
+}
+.chip.verified { color: var(--verified); background: var(--verified-bg); border-color: var(--verified-line); }
+.chip.amber { color: var(--amber); background: var(--amber-bg); border-color: var(--amber-line); }
+.chip.offline { color: var(--danger); border-color: rgba(255, 180, 171, 0.35); background: rgba(255, 180, 171, 0.08); }
+.dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.topbar-actions { display: flex; align-items: center; gap: 8px; flex: none; }
+.icon-btn {
+  display: none; width: 36px; height: 36px; flex: none; border-radius: var(--radius);
+  border: 1px solid var(--line); background: transparent; color: var(--text-2);
+  align-items: center; justify-content: center;
+}
+
+.disclaimer {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 6px 16px; text-align: center;
+  background: var(--amber-bg); color: var(--amber);
+  border-bottom: 1px solid var(--amber-line);
+  font: 600 12px/18px var(--font-mono); letter-spacing: 0.02em;
+}
+.disclaimer span { min-width: 0; }
+
+.body { display: grid; grid-template-columns: var(--rail-w) minmax(0, 1fr); min-height: 0; }
+
+/* ---------- Rail ---------- */
+.rail {
+  min-height: 0; display: flex; flex-direction: column; gap: 16px;
+  padding: 16px; background: var(--bg-rail); border-right: 1px solid var(--line);
+  overflow-y: auto;
+}
+.btn-primary {
+  display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+  min-height: 40px; padding: 8px 14px; border: 0; border-radius: var(--radius);
+  background: var(--primary); color: #fff; white-space: nowrap; flex: none;
+  font: 600 12px/16px var(--font-mono); letter-spacing: 0.02em;
+}
+.btn-primary:hover { background: var(--primary-hover); box-shadow: 0 0 12px rgba(37, 99, 235, 0.35); }
+.btn-primary:disabled { opacity: 0.55; cursor: not-allowed; box-shadow: none; }
+.rail .btn-primary { width: 100%; }
+.rail-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 4px;
+  font: 600 10px/14px var(--font-mono); letter-spacing: 0.05em; text-transform: uppercase; color: var(--muted);
+}
+.threads { display: flex; flex-direction: column; gap: 2px; list-style: none; margin: 0; padding: 0; }
+.thread {
+  display: flex; align-items: center; gap: 4px; min-width: 0;
+  border-radius: var(--radius); border-left: 2px solid transparent;
+}
+.thread:hover { background: var(--surface); }
+.thread.active { background: var(--surface-high); border-left-color: var(--primary-text); }
+.thread-open {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: center; gap: 8px;
+  padding: 8px 6px 8px 10px; background: none; border: 0; text-align: left; color: var(--text-2);
+  font: 500 12px/18px var(--font-mono);
+}
+.thread.active .thread-open { color: var(--primary-text); }
+.thread-meta { flex: none; font: 500 10px/14px var(--font-mono); color: var(--muted); }
+.thread-del {
+  flex: none; width: 28px; height: 28px; margin-right: 4px; border-radius: var(--radius);
+  border: 0; background: none; color: var(--muted); display: grid; place-items: center;
+  opacity: 0; transition: opacity 120ms;
+}
+.thread:hover .thread-del, .thread-del:focus-visible, .thread.active .thread-del { opacity: 1; }
+.thread-del:hover { color: var(--danger); background: rgba(255, 180, 171, 0.08); }
+@media (hover: none) { .thread-del { opacity: 1; } }
+.rail-empty { padding: 4px; color: var(--muted); font-size: 12px; line-height: 18px; }
+
+.panel {
+  border: 1px solid var(--line); border-radius: var(--radius-lg); background: var(--surface);
+  padding: 12px; display: flex; flex-direction: column; gap: 8px;
+}
+.scheme-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.scheme-list li {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0;
+  padding: 5px 0; border-bottom: 1px solid rgba(255, 255, 255, 0.04); font-size: 12px; line-height: 18px; color: var(--text-2);
+}
+.scheme-list li:last-child { border-bottom: 0; }
+.scheme-list .tag { flex: none; color: var(--verified); font: 500 10px/14px var(--font-mono); }
+.rail-foot { margin-top: auto; color: var(--muted); font-size: 12px; line-height: 18px; }
+
+/* ---------- Main ---------- */
+.main { min-width: 0; min-height: 0; display: grid; grid-template-rows: minmax(0, 1fr) auto; }
+.scroller { min-height: 0; overflow-y: auto; overflow-x: hidden; scroll-behavior: smooth; }
+.column { width: 100%; max-width: 920px; margin: 0 auto; padding: 28px 24px 24px; display: flex; flex-direction: column; gap: 20px; }
+
+.welcome { display: flex; flex-direction: column; gap: 14px; }
+.welcome-tags { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.welcome h1 {
+  margin: 0; font: 600 clamp(24px, 3.2vw, 34px)/1.2 var(--font-head); letter-spacing: -0.025em;
+  overflow-wrap: break-word;
+}
+.welcome p { margin: 0; max-width: 680px; color: var(--text-2); font-size: 15px; line-height: 24px; }
+.starters { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 12px; }
+.starter {
+  min-width: 0; display: flex; flex-direction: column; gap: 10px; text-align: left;
+  padding: 14px; border-radius: var(--radius-lg); border: 1px solid var(--line);
+  background: var(--surface-high); color: var(--text); transition: border-color 120ms, transform 120ms;
+}
+.starter:hover, .starter:focus-visible { border-color: rgba(59, 130, 246, 0.55); outline: none; }
+.starter:active { transform: scale(0.99); }
+.starter-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; color: var(--primary-text); }
+.starter-q { font-weight: 500; font-size: 13px; line-height: 20px; overflow-wrap: break-word; }
+.starter-tag { color: var(--muted); font: 500 11px/16px var(--font-mono); }
+
+/* ---------- Messages ---------- */
+.msg { display: flex; align-items: flex-start; gap: 10px; min-width: 0; }
+.msg.user { justify-content: flex-end; }
+.avatar {
+  width: 32px; height: 32px; flex: none; border-radius: var(--radius); display: grid; place-items: center;
+  border: 1px solid var(--line-strong); background: var(--surface-highest); color: var(--text-2);
+  font: 600 10px/1 var(--font-mono);
+}
+.avatar.bot { background: var(--primary); border-color: rgba(59, 130, 246, 0.5); color: #fff; }
+.avatar.guard { background: var(--amber-bg); border-color: var(--amber-line); color: var(--amber); }
+.bubble {
+  min-width: 0; max-width: min(620px, 85%); padding: 12px 14px; border-radius: var(--radius-lg);
+  background: var(--surface-high); border: 1px solid var(--line-strong);
+  overflow-wrap: anywhere;
+}
+.bubble p { margin: 0; white-space: pre-wrap; }
+.bubble time { display: block; margin-top: 4px; text-align: right; color: var(--muted); font: 500 10px/14px var(--font-mono); }
+
+.card {
+  flex: 1 1 auto; min-width: 0; max-width: 760px;
+  display: flex; flex-direction: column; gap: 12px; padding: 16px 18px;
+  background: var(--surface-low); border: 1px solid var(--line); border-left: 3px solid var(--primary);
+  border-radius: var(--radius-lg); box-shadow: 0 4px 20px -2px rgba(0, 0, 0, 0.5);
+}
+.card.guard { border-left-color: var(--amber); background: linear-gradient(rgba(245, 158, 11, 0.03), rgba(245, 158, 11, 0.03)), var(--surface-low); }
+.card.nodata { border-left-color: var(--muted); }
+.card-head { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-width: 0; }
+.card-head .scheme { flex: 1 1 160px; color: var(--muted); font: 500 11px/16px var(--font-mono); }
+.card-body { font-size: 15px; line-height: 25px; overflow-wrap: anywhere; }
+.card-body p { margin: 0; }
+
+.source {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; min-width: 0;
+  padding: 10px 12px; border-radius: var(--radius); background: var(--surface); border: 1px solid var(--line);
+  font: 500 11px/16px var(--font-mono);
+}
+.source-url { flex: 1 1 200px; display: flex; align-items: center; gap: 8px; min-width: 0; color: var(--muted); }
+.source-url .icon { color: var(--verified); }
+.source-url a { color: var(--text); text-decoration: underline; text-underline-offset: 2px; }
+.source-open { flex: none; color: var(--link); text-decoration: none; white-space: nowrap; }
+.source-open:hover { text-decoration: underline; }
+.footer-note { color: var(--muted); font: italic 500 11px/16px var(--font-mono); }
+
+.typing { display: inline-flex; gap: 4px; padding: 4px 0; }
+.typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--muted); animation: blink 1.2s infinite both; }
+.typing i:nth-child(2) { animation-delay: 0.2s; }
+.typing i:nth-child(3) { animation-delay: 0.4s; }
+@keyframes blink { 0%, 80%, 100% { opacity: 0.25; } 40% { opacity: 1; } }
+
+.alert {
+  padding: 10px 14px; border-radius: var(--radius); border: 1px solid rgba(255, 180, 171, 0.35);
+  background: rgba(255, 180, 171, 0.08); color: var(--danger); font-size: 13px; line-height: 20px; overflow-wrap: anywhere;
+}
+
+/* ---------- Composer ---------- */
+.composer { border-top: 1px solid var(--line); background: rgba(6, 14, 32, 0.92); backdrop-filter: blur(12px); }
+.composer .column { padding-top: 12px; padding-bottom: 12px; gap: 8px; }
+.composer form {
+  display: flex; align-items: flex-end; gap: 8px; min-width: 0;
+  padding: 6px 6px 6px 14px; border-radius: var(--radius-lg);
+  background: var(--bg); border: 1px solid rgba(255, 255, 255, 0.12);
+}
+.composer form:focus-within { border-color: var(--primary-hover); box-shadow: 0 0 0 1px var(--primary-hover), 0 0 16px rgba(59, 130, 246, 0.15); }
+.composer textarea {
+  flex: 1 1 auto; min-width: 0; resize: none; border: 0; outline: none; background: transparent;
+  padding: 8px 0; max-height: 160px; line-height: 22px; font-size: 14px;
+}
+.composer textarea::placeholder { color: #64748b; }
+.composer-meta { display: flex; flex-wrap: wrap; justify-content: space-between; gap: 4px 12px; color: var(--muted); font: 500 11px/16px var(--font-mono); }
+.composer-meta span { min-width: 0; }
+
+/* ---------- Responsive ---------- */
+@media (max-width: 1100px) { :root { --rail-w: 260px; } }
+@media (max-width: 860px) {
+  .body { grid-template-columns: minmax(0, 1fr); }
+  .rail {
+    position: fixed; z-index: 30; top: 0; bottom: 0; left: 0; width: min(86vw, 320px);
+    transform: translateX(-100%); transition: transform 180ms ease; box-shadow: 0 12px 32px -4px rgba(0, 0, 0, 0.7);
+  }
+  .app.rail-open .rail { transform: none; }
+  .scrim { position: fixed; inset: 0; z-index: 20; background: rgba(11, 15, 25, 0.7); display: none; }
+  .app.rail-open .scrim { display: block; }
+  .icon-btn { display: inline-flex; }
+  .topbar .chip.hide-sm { display: none; }
+  .column { padding-left: 16px; padding-right: 16px; }
+  .bubble { max-width: 88%; }
+  .msg .avatar { display: none; }
+}
+@media (max-width: 520px) {
+  .brand-title { font-size: 15px; }
+  .btn-label-long { display: none; }
+  .disclaimer { font-size: 11px; }
+}
+</style>
 </head>
-<body class="bg-surface text-on-surface antialiased font-body-md overflow-x-hidden selection:bg-primary-container selection:text-on-primary-container">
-  <!-- ==================== TOP NAVIGATION BAR ==================== -->
-  <header class="w-full flex flex-col bg-surface-container-low docked full-width top-0 z-50 sticky border-b border-outline-variant/30">
-    <div class="flex items-center justify-between px-4 lg:px-6 h-14 gap-3">
-      <!-- Brand & Product Identity -->
-      <div class="flex items-center gap-3 shrink-0">
-        <div class="w-8 h-8 rounded bg-primary-container flex items-center justify-center text-on-primary-container font-headline-md shadow-sm">
-          <span class="material-symbols-outlined text-[18px]">verified_user</span>
-        </div>
-        <div class="flex flex-col">
-          <div class="flex items-center gap-2">
-            <span class="font-headline-md text-headline-md font-semibold text-on-surface tracking-tight">HDFC Mutual Fund Facts-Only Assistant</span>
-            <span class="bg-surface-container-high border border-outline-variant/40 text-primary font-label-sm text-label-sm px-1.5 py-0.5 rounded">v1.0 Facts-Only</span>
-          </div>
-        </div>
+<body>
+<div class="app" id="app">
+  <header class="topbar">
+    <button class="icon-btn" id="btn-rail" aria-label="Show conversations" aria-controls="rail" aria-expanded="false">
+      <svg class="icon" viewBox="0 0 24 24"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+    </button>
+    <div class="brand">
+      <div class="brand-mark" aria-hidden="true">
+        <svg class="icon" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M9 12l2 2 4-4"/></svg>
       </div>
-      <!-- Grounding Status & New Session CTA -->
-      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
-        <div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-surface-container border border-outline-variant/40 text-secondary font-label-sm text-label-sm">
-          <span class="inline-block w-2 h-2 rounded-full bg-secondary animate-pulse"></span>
-          <span class="hidden sm:inline">Groq Engine Online</span>
-        </div>
-        <div class="hidden xl:flex items-center gap-1 px-2 py-0.5 rounded bg-tertiary-container/30 border border-tertiary/40 text-tertiary font-label-sm text-label-sm">
-          <span class="material-symbols-outlined text-[14px]">gavel</span>
-          <span>SEBI Non-Advisory Grounding</span>
-        </div>
-        <button id="btn-new-session" class="ml-1 px-3 py-1.5 bg-primary-container hover:bg-primary-container/90 text-on-primary-container font-label-md text-label-md rounded active:scale-[0.98] transition-all flex items-center gap-1.5 shadow-sm">
-          <span class="material-symbols-outlined text-[16px]">restart_alt</span>
-          <span>New Session</span>
-        </button>
-      </div>
+      <span class="brand-title ellipsis" title="HDFC Mutual Fund FAQ Assistant">HDFC Mutual Fund FAQ Assistant</span>
+      <span class="chip hide-sm">Facts-only</span>
     </div>
-    <!-- Mandatory Regulatory Warning Banner -->
-    <div class="w-full bg-tertiary-container/20 border-t border-b border-tertiary/30 px-4 py-1.5 flex items-center justify-between text-tertiary font-label-sm text-label-sm">
-      <div class="flex items-center gap-2 mx-auto text-center truncate">
-        <span class="material-symbols-outlined text-[15px] shrink-0 text-tertiary">warning</span>
-        <span class="truncate">
-          <strong>MANDATORY REGULATORY DISCLAIMER:</strong> Facts-only assistant. No investment advice, opinions, or performance predictions provided. Non-SEBI registered entity. Strictly non-promotional.
-        </span>
-      </div>
-      <span class="hidden md:inline font-label-sm uppercase tracking-widest text-[9px] text-tertiary/70 shrink-0 ml-4">AMFI Ref: 2024-CIR-92</span>
+    <div class="topbar-actions">
+      <span class="chip" id="status-chip" title="Backend status"><span class="dot"></span><span id="status-text">Checking…</span></span>
     </div>
   </header>
 
-  <!-- ==================== APP CONTAINER / SIDE RAIL + CANVAS ==================== -->
-  <div class="flex min-h-[calc(100vh-84px)] w-full">
-    <!-- Docked Left Terminal Navigation Sidebar (280px) -->
-    <aside class="fixed left-0 top-[84px] bottom-0 w-[280px] hidden lg:flex flex-col justify-between p-4 z-40 bg-surface-container-lowest border-r border-outline-variant/30">
-      <div class="flex flex-col gap-4">
-        <!-- New Query Button -->
-        <button id="btn-new-query" class="w-full py-2.5 px-3 bg-gradient-to-r from-primary-container to-blue-700 hover:from-blue-600 hover:to-blue-800 text-on-primary-container font-label-md text-label-md rounded flex items-center justify-center gap-2 active:scale-[0.98] transition-all shadow-md">
-          <span class="material-symbols-outlined text-[18px]">add_circle</span>
-          <span class="font-semibold">+ New Query</span>
-        </button>
-        <!-- Sidebar Section Header -->
-        <div class="px-1 flex items-center justify-between">
-          <span class="font-label-sm text-label-sm uppercase text-outline tracking-wider">CONVERSATIONS</span>
-          <span id="threads-count-badge" class="text-outline text-[10px] font-label-sm">0 ACTIVE</span>
-        </div>
-        <!-- Thread list container -->
-        <div id="threads-list" class="flex flex-col gap-1 max-h-[320px] overflow-y-auto"></div>
-        <!-- Scheme Coverage Metric Box -->
-        <div class="mt-4 p-3 rounded bg-surface-container border border-outline-variant/30 flex flex-col gap-2">
-          <div class="flex items-center justify-between">
-            <span class="font-label-sm text-label-sm text-on-surface-variant font-semibold">Covered Schemes (5 Verified)</span>
-            <span class="w-2 h-2 rounded-full bg-secondary"></span>
-          </div>
-          <div class="flex flex-col gap-1 text-[11px] font-body-sm text-outline">
-            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
-              <span class="truncate">Mid-Cap Opp.</span>
-              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
-            </div>
-            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
-              <span class="truncate">Small Cap Fund</span>
-              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
-            </div>
-            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
-              <span class="truncate">Top 100 Large</span>
-              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
-            </div>
-            <div class="flex items-center justify-between py-0.5 border-b border-outline-variant/10">
-              <span class="truncate">Silver ETF FoF</span>
-              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
-            </div>
-            <div class="flex items-center justify-between py-0.5">
-              <span class="truncate">Multi-Cap Fund</span>
-              <span class="text-secondary font-label-sm flex items-center gap-0.5"><span class="material-symbols-outlined text-[12px]">check_circle</span>Active</span>
-            </div>
-          </div>
-        </div>
-      </div>
-      <!-- Footer Rail Links -->
-      <div class="flex flex-col gap-1 pt-3 border-t border-outline-variant/30 text-on-surface-variant font-label-md text-label-md">
-        <div class="px-3 py-1 text-[11px] text-outline font-label-sm">
-          AMFI Reference: 2024-CIR-92
-        </div>
-      </div>
-    </aside>
+  <div class="disclaimer" role="note">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l10 18H2L12 3z"/><path d="M12 10v4M12 17.5v.5"/></svg>
+    <span>Facts-only. No investment advice.</span>
+  </div>
 
-    <!-- ==================== MAIN CHAT & DATA CANVAS ==================== -->
-    <main class="flex-1 lg:ml-[280px] flex flex-col justify-between px-4 sm:px-6 lg:px-8 py-6 max-w-5xl mx-auto w-full min-h-[calc(100vh-84px)] pb-36">
-      <!-- Welcome Header & Quick Starters -->
-      <section id="welcome-section" class="flex flex-col gap-4 mb-8">
-        <div class="flex flex-col gap-1">
-          <div class="flex items-center gap-2">
-            <span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-primary-container/20 text-primary border border-primary/30">SEBI NON-ADVISORY COMPLIANT</span>
-            <span class="text-outline text-body-sm">• Strictly Non-Predictive</span>
-          </div>
-          <h1 class="font-headline-xl text-2xl sm:text-3xl font-semibold text-on-surface tracking-tight">
-            Verified Mutual Fund Facts at Your Fingertips
-          </h1>
-          <p class="font-body-md text-body-md text-on-surface-variant max-w-2xl">
-            Strictly grounded in official Groww scheme data. Brevity guaranteed (≤ 3 sentences). Zero personal opinion, recommendation, or return guarantees.
-          </p>
-        </div>
-        <!-- Quick Starter Action Chips (Bento Grid) -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 pt-2">
-          <!-- Card 1 -->
-          <div onclick="selectStarter('What is the expense ratio and current NAV of HDFC Mid Cap Direct Plan Growth?')" class="p-3.5 rounded bg-surface-container-high border border-outline-variant/30 hover:border-primary/50 transition-all duration-150 cursor-pointer group shadow-sm flex flex-col justify-between gap-3">
-            <div class="flex items-start justify-between">
-              <span class="text-xl">📊</span>
-              <span class="font-label-sm text-label-sm text-outline group-hover:text-primary transition-colors">QUERY</span>
-            </div>
-            <div>
-              <p class="font-body-sm text-body-sm font-medium text-on-surface group-hover:text-primary transition-colors">
-                What is the expense ratio and current NAV of HDFC Mid Cap Direct Plan Growth?
-              </p>
-              <span class="text-[11px] font-label-sm text-outline mt-1 block">Expense &amp; NAV Metrics</span>
-            </div>
-          </div>
-          <!-- Card 2 -->
-          <div onclick="selectStarter('What is the exit load for HDFC Small Cap Fund if redeemed within 1 year?')" class="p-3.5 rounded bg-surface-container-high border border-outline-variant/30 hover:border-primary/50 transition-all duration-150 cursor-pointer group shadow-sm flex flex-col justify-between gap-3">
-            <div class="flex items-start justify-between">
-              <span class="text-xl">⏱️</span>
-              <span class="font-label-sm text-label-sm text-outline group-hover:text-primary transition-colors">QUERY</span>
-            </div>
-            <div>
-              <p class="font-body-sm text-body-sm font-medium text-on-surface group-hover:text-primary transition-colors">
-                What is the exit load for HDFC Small Cap Fund if redeemed within 1 year?
-              </p>
-              <span class="text-[11px] font-label-sm text-outline mt-1 block">Redemption Horizon Terms</span>
-            </div>
-          </div>
-          <!-- Card 3 -->
-          <div onclick="selectStarter('What is the minimum SIP amount for HDFC Top 100 Large Cap Fund?')" class="p-3.5 rounded bg-surface-container-high border border-outline-variant/30 hover:border-primary/50 transition-all duration-150 cursor-pointer group shadow-sm flex flex-col justify-between gap-3">
-            <div class="flex items-start justify-between">
-              <span class="text-xl">💰</span>
-              <span class="font-label-sm text-label-sm text-outline group-hover:text-primary transition-colors">QUERY</span>
-            </div>
-            <div>
-              <p class="font-body-sm text-body-sm font-medium text-on-surface group-hover:text-primary transition-colors">
-                What is the minimum SIP amount for HDFC Top 100 Large Cap Fund?
-              </p>
-              <span class="text-[11px] font-label-sm text-outline mt-1 block">Statutory Minimum Threshold</span>
-            </div>
-          </div>
-        </div>
+  <div class="body">
+    <div class="scrim" id="scrim"></div>
+    <aside class="rail" id="rail" aria-label="Conversations">
+      <button class="btn-primary" id="btn-new-chat" type="button">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+        <span>New Chat</span>
+      </button>
+
+      <div class="rail-head"><span>Threads</span><span id="threads-count">0</span></div>
+      <ul class="threads" id="threads"></ul>
+
+      <section class="panel" aria-label="Covered schemes">
+        <div class="rail-head" style="padding:0"><span>Covered schemes</span><span class="dot" style="color:var(--verified)"></span></div>
+        <ul class="scheme-list">
+          <li><span class="ellipsis" title="HDFC Mid-Cap Opportunities Fund">HDFC Mid-Cap Opportunities Fund</span><span class="tag">MID CAP</span></li>
+          <li><span class="ellipsis" title="HDFC Small Cap Fund">HDFC Small Cap Fund</span><span class="tag">SMALL CAP</span></li>
+          <li><span class="ellipsis" title="HDFC Large Cap Fund (Top 100)">HDFC Large Cap Fund (Top 100)</span><span class="tag">LARGE CAP</span></li>
+          <li><span class="ellipsis" title="HDFC Silver ETF Fund of Fund">HDFC Silver ETF Fund of Fund</span><span class="tag">FOF</span></li>
+          <li><span class="ellipsis" title="HDFC Multi Cap Fund">HDFC Multi Cap Fund</span><span class="tag">MULTI CAP</span></li>
+        </ul>
       </section>
 
-      <!-- Active Message History -->
-      <section id="chat-history" class="flex flex-col gap-6"></section>
-    </main>
-  </div>
+      <p class="rail-foot">Answers come only from the official Groww scheme pages for these five funds. Each answer cites one source.</p>
+    </aside>
 
-  <!-- ==================== FIXED BOTTOM PROMPT & AUDIT BAR ==================== -->
-  <div class="fixed bottom-0 left-0 right-0 lg:left-[280px] bg-surface-container-lowest/95 backdrop-blur-md border-t border-outline-variant/30 p-3 sm:p-4 z-40">
-    <div class="max-w-4xl mx-auto flex flex-col gap-2">
-      <!-- Prompt Bar with Controls -->
-      <form id="chat-form" onsubmit="handleFormSubmit(event)" class="relative flex items-center rounded-lg bg-surface-container-high border border-outline-variant/40 focus-within:border-primary-container focus-within:ring-1 focus-within:ring-primary-container transition-all">
-        <div class="pl-3.5 pr-2 flex items-center text-outline">
-          <span class="material-symbols-outlined text-[20px]">search</span>
-        </div>
-        <input id="query-input" class="w-full bg-transparent border-none text-on-surface placeholder:text-outline font-body-md text-body-md focus:outline-none focus:ring-0 py-2.5 px-0" placeholder="Ask a scheme fact (TER, NAV, SIP limits, AUM, exit loads)..." type="text" autocomplete="off" />
-        <div class="flex items-center gap-1.5 pr-2 shrink-0">
-          <button type="submit" id="btn-submit" class="px-3.5 py-1.5 rounded bg-primary-container hover:bg-primary-container/90 text-on-primary-container font-label-md text-label-md flex items-center gap-1 shadow-sm active:scale-[0.98] transition-all">
-            <span>Query Facts</span>
-            <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
-          </button>
-        </div>
-      </form>
-      <!-- Engine Telemetry & Micro Disclaimer -->
-      <div class="flex items-center justify-between flex-wrap gap-2 px-1 text-[11px] font-label-sm">
-        <div class="flex items-center gap-3 text-outline">
-          <span class="flex items-center gap-1 text-secondary">
-            <span class="inline-block w-1.5 h-1.5 rounded-full bg-secondary"></span>
-            <span>Groq LPU 120B</span>
-          </span>
-          <span>•</span>
-          <span>Latency: ~140ms</span>
-          <span>•</span>
-          <span class="text-primary">Facts-Only Guardrail ON</span>
-        </div>
-        <div class="text-outline truncate">
-          Data cross-referenced with SEBI filings &amp; Groww data feeds. Never constitutes financial advice.
+    <main class="main">
+      <div class="scroller" id="scroller">
+        <div class="column">
+          <section class="welcome" id="welcome" hidden>
+            <div class="welcome-tags">
+              <span class="chip">Facts-only</span>
+              <span class="chip amber">No investment advice</span>
+            </div>
+            <h1>Verified mutual fund facts, cited</h1>
+            <p>Welcome! I can answer factual questions about five HDFC Mutual Fund schemes: expense ratio, exit load, minimum SIP, lock-in, riskometer, benchmark and more. Answers are at most 3 sentences and link to one official source.</p>
+            <div class="starters" id="starters"></div>
+          </section>
+          <section id="messages" aria-live="polite" style="display:flex;flex-direction:column;gap:20px"></section>
         </div>
       </div>
-    </div>
+
+      <div class="composer">
+        <div class="column">
+          <form id="chat-form" autocomplete="off">
+            <label for="query" class="sr-only">Your question</label>
+            <textarea id="query" rows="1" maxlength="2000" placeholder="Type your question…"></textarea>
+            <button class="btn-primary" id="btn-send" type="submit">
+              <span class="btn-label-long">Send</span>
+              <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+            </button>
+          </form>
+          <div class="composer-meta">
+            <span>Enter to send · Shift+Enter for a new line</span>
+            <span>Not investment advice. Check the cited source before acting.</span>
+          </div>
+        </div>
+      </div>
+    </main>
   </div>
+</div>
 
-  <!-- Interactive Client Script -->
-  <script>
-    let currentThreadId = null;
+<script>
+(() => {
+  "use strict";
 
-    function escapeHtml(text) {
-      if (!text) return '';
-      return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  const API = "/api";
+  const DISCLAIMER = "Facts-only. No investment advice.";
+  const AMC_URL = "https://www.hdfcfund.com";
+  const STARTERS = [
+    { tag: "Expense ratio", q: "What is the expense ratio of HDFC Mid Cap Fund Direct Growth?",
+      icon: '<path d="M4 20V10M10 20V4M16 20v-7M22 20H2"/>' },
+    { tag: "Exit load", q: "What is the exit load for HDFC Small Cap Fund?",
+      icon: '<circle cx="12" cy="13" r="8"/><path d="M12 9v4l2 2M9 2h6"/>' },
+    { tag: "Minimum SIP", q: "What is the minimum SIP amount for HDFC Large Cap Fund?",
+      icon: '<path d="M12 2v20M17 6H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>' },
+  ];
+  const SCHEMES = {
+    "hdfc-mid-cap-fund-direct-growth": "HDFC Mid-Cap Opportunities Fund",
+    "hdfc-small-cap-fund-direct-growth": "HDFC Small Cap Fund",
+    "hdfc-large-cap-fund-direct-growth": "HDFC Large Cap Fund",
+    "hdfc-silver-etf-fof-direct-growth": "HDFC Silver ETF FoF",
+    "hdfc-multi-cap-fund-direct-growth": "HDFC Multi Cap Fund",
+  };
+  const CATEGORY_LABEL = {
+    ADVISORY: "Advice not provided", COMPARATIVE: "Comparison not provided",
+    PERFORMANCE: "Returns not provided", PII_DETECTED: "Personal data blocked",
+    OUT_OF_SCOPE: "Out of scope", INVALID_INPUT: "Question needed",
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const el = {
+    app: $("app"), threads: $("threads"), count: $("threads-count"), welcome: $("welcome"),
+    starters: $("starters"), messages: $("messages"), scroller: $("scroller"), form: $("chat-form"),
+    input: $("query"), send: $("btn-send"), newChat: $("btn-new-chat"), railBtn: $("btn-rail"),
+    scrim: $("scrim"), statusChip: $("status-chip"), statusText: $("status-text"),
+  };
+
+  let threads = [];
+  let currentId = null;
+  let busy = false;
+
+  // ---------- helpers ----------
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const icon = (paths) => `<svg class="icon" viewBox="0 0 24 24" aria-hidden="true">${paths}</svg>`;
+  const ICON_LINK = '<path d="M10 13a5 5 0 0 0 7.5.5l3-3a5 5 0 0 0-7-7l-1.7 1.7"/><path d="M14 11a5 5 0 0 0-7.5-.5l-3 3a5 5 0 0 0 7 7l1.7-1.7"/>';
+  const ICON_TRASH = '<path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/>';
+
+  /** Escapes text, then turns bare URLs into safe links. */
+  function linkify(text) {
+    return esc(text).replace(/https?:\/\/[^\s<]+[^\s<.,)]/g, (u) => `<a href="${u}" target="_blank" rel="noopener noreferrer">${u}</a>`);
+  }
+
+  function fmtTime(iso) {
+    const d = iso ? new Date(iso) : new Date();
+    return isNaN(d) ? "" : d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  }
+
+  function schemeFromUrl(url) {
+    const slug = (url || "").split("/").filter(Boolean).pop() || "";
+    return SCHEMES[slug] || null;
+  }
+
+  /** Splits the API's formatted answer: body / "📎 Source: url" / "_Last updated from sources: date_". */
+  function parseAnswer(content, storedSource) {
+    let text = String(content || "");
+    let source = storedSource || null;
+    const s = text.match(/📎\s*Source:\s*(https?:\/\/\S+)/);
+    if (s) { source = source || s[1]; text = text.replace(s[0], ""); }
+    let footer = null;
+    const f = text.match(/_?Last updated from sources:\s*([^_\n]+?)_?\s*$/m);
+    if (f) { footer = `Last updated from sources: ${f[1].trim()}`; text = text.replace(f[0], ""); }
+    return { body: text.trim(), source, footer };
+  }
+
+  async function api(method, path, body) {
+    const res = await fetch(`${API}${path}`, {
+      method, headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    let data = null;
+    try { data = await res.json(); } catch { /* empty body */ }
+    return { ok: res.ok, status: res.status, data };
+  }
+
+  function scrollToEnd() { requestAnimationFrame(() => { el.scroller.scrollTop = el.scroller.scrollHeight; }); }
+
+  // ---------- rendering ----------
+  function renderStarters() {
+    el.starters.innerHTML = STARTERS.map((s, i) => `
+      <button class="starter" type="button" data-i="${i}">
+        <span class="starter-top">${icon(s.icon)}<span class="chip">Example</span></span>
+        <span class="starter-q">${esc(s.q)}</span>
+        <span class="starter-tag">${esc(s.tag)}</span>
+      </button>`).join("");
+    el.starters.querySelectorAll(".starter").forEach((b) =>
+      b.addEventListener("click", () => send(STARTERS[+b.dataset.i].q)));
+  }
+
+  function renderThreads() {
+    el.count.textContent = String(threads.length);
+    if (!threads.length) {
+      el.threads.innerHTML = '<li class="rail-empty">No conversations yet. Ask a question to start one.</li>';
+      return;
+    }
+    el.threads.innerHTML = threads.map((t) => `
+      <li class="thread${t.thread_id === currentId ? " active" : ""}" data-id="${esc(t.thread_id)}">
+        <button class="thread-open" type="button" title="${esc(t.title || "New Chat")}" ${t.thread_id === currentId ? 'aria-current="true"' : ""}>
+          <span class="ellipsis" style="flex:1 1 auto">${esc(t.title || "New Chat")}</span>
+          <span class="thread-meta">${t.message_count ? Math.ceil(t.message_count / 2) : 0}</span>
+        </button>
+        <button class="thread-del" type="button" aria-label="Delete thread ${esc(t.title || "New Chat")}" title="Delete thread">${icon(ICON_TRASH)}</button>
+      </li>`).join("");
+  }
+
+  function userMessage(content, createdAt) {
+    const node = document.createElement("div");
+    node.className = "msg user";
+    node.innerHTML = `
+      <div class="bubble"><p>${esc(content)}</p><time>${esc(fmtTime(createdAt))}</time></div>
+      <div class="avatar" aria-hidden="true">YOU</div>`;
+    return node;
+  }
+
+  function assistantMessage(content, storedSource, meta = {}) {
+    const { body, source, footer } = parseAnswer(content, storedSource);
+    // Refusals never carry a citation (rag_pipeline sets source_url=None for every non-factual category)
+    const isRefusal = meta.is_refusal ?? !source;
+    const node = document.createElement("div");
+    node.className = "msg";
+
+    if (isRefusal) {
+      const label = CATEGORY_LABEL[meta.category] || "Non-advisory guard";
+      node.innerHTML = `
+        <div class="avatar guard" aria-hidden="true">${icon('<path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/>')}</div>
+        <article class="card guard">
+          <div class="card-head"><span class="chip amber">${esc(label)}</span></div>
+          <div class="card-body"><p>${linkify(body)}</p></div>
+        </article>`;
+      return node;
     }
 
-    function formatMarkdown(text) {
-      let safe = escapeHtml(text);
-      safe = safe.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
-      safe = safe.replace(/(?<!\*)\*(?!\*)(.+?)(?<!\*)\*(?!\*)/g, '<em>$1</em>');
-      safe = safe.replace(/`(.+?)`/g, '<code class="bg-surface-container px-1 py-0.5 rounded text-primary text-xs">$1</code>');
-      safe = safe.replace(/\n\n/g, '<br/><br/>').replace(/\n/g, '<br/>');
-      return safe;
-    }
+    const scheme = schemeFromUrl(source);
+    const noData = !scheme && source === AMC_URL;
+    node.innerHTML = `
+      <div class="avatar bot" aria-hidden="true">${icon('<path d="M3 21h18M5 21V10M19 21V10M9 21V10M15 21V10M2 10l10-6 10 6"/>')}</div>
+      <article class="card${noData ? " nodata" : ""}">
+        <div class="card-head">
+          ${noData ? '<span class="chip">No verified data</span>' : '<span class="chip verified">Verified factual</span>'}
+          <span class="scheme ellipsis">${esc(scheme || "HDFC Mutual Fund")}</span>
+        </div>
+        <div class="card-body"><p>${linkify(body)}</p></div>
+        ${source ? `
+        <div class="source">
+          <span class="source-url">${icon(ICON_LINK)}<span class="ellipsis">Source: <a href="${esc(source)}" target="_blank" rel="noopener noreferrer" title="${esc(source)}">${esc(source.replace(/^https?:\/\//, ""))}</a></span></span>
+          <a class="source-open" href="${esc(source)}" target="_blank" rel="noopener noreferrer">Open source ↗</a>
+        </div>` : ""}
+        ${footer ? `<div class="footer-note">${esc(footer)}</div>` : ""}
+      </article>`;
+    return node;
+  }
 
-    async function loadThreads() {
-      try {
-        const res = await fetch('/api/threads');
-        const threads = await res.json();
-        const container = document.getElementById('threads-list');
-        container.innerHTML = '';
+  function pendingMessage() {
+    const node = document.createElement("div");
+    node.className = "msg";
+    node.innerHTML = `
+      <div class="avatar bot" aria-hidden="true">…</div>
+      <article class="card"><span class="typing" role="status" aria-label="Retrieving verified facts"><i></i><i></i><i></i></span></article>`;
+    return node;
+  }
 
-        if (!threads || threads.length === 0) {
-          await createNewThread();
-          return;
-        }
+  function errorMessage(text) {
+    const node = document.createElement("div");
+    node.className = "alert";
+    node.setAttribute("role", "alert");
+    node.textContent = text;
+    return node;
+  }
 
-        if (!currentThreadId) {
-          currentThreadId = threads[0].thread_id;
-        }
+  function showWelcome(show) { el.welcome.hidden = !show; }
 
-        document.getElementById('threads-count-badge').innerText = `${threads.length} ACTIVE`;
+  // ---------- data flow ----------
+  async function loadThreads() {
+    try {
+      const r = await api("GET", "/threads");
+      threads = r.ok && Array.isArray(r.data) ? r.data : [];
+    } catch { threads = []; }
+    if (currentId && !threads.some((t) => t.thread_id === currentId)) currentId = null;
+    renderThreads();
+  }
 
-        threads.forEach(t => {
-          const isActive = (t.thread_id === currentThreadId);
-          const el = document.createElement('div');
-          el.className = isActive 
-            ? "bg-surface-container-high text-primary border-l-2 border-primary font-label-md text-label-md px-3 py-2 flex items-center justify-between rounded-r transition-colors group cursor-pointer"
-            : "text-on-surface-variant hover:text-on-surface hover:bg-surface-container font-label-md text-label-md px-3 py-2 flex items-center justify-between rounded transition-colors group cursor-pointer";
+  async function openThread(id) {
+    currentId = id;
+    renderThreads();
+    el.messages.innerHTML = "";
+    if (!id) { showWelcome(true); return; }
+    const r = await api("GET", `/threads/${encodeURIComponent(id)}`);
+    if (r.status === 404) { currentId = null; await loadThreads(); showWelcome(true); return; }
+    const msgs = (r.ok && r.data && r.data.messages) || [];
+    showWelcome(msgs.length === 0);
+    msgs.forEach((m) => el.messages.appendChild(
+      m.role === "user" ? userMessage(m.content, m.created_at) : assistantMessage(m.content, m.source_url)));
+    scrollToEnd();
+  }
 
-          el.innerHTML = `
-            <div class="flex items-center gap-2 truncate">
-              <span class="material-symbols-outlined text-[16px] ${isActive ? 'text-primary' : 'text-outline'} shrink-0">${isActive ? 'show_chart' : 'trending_up'}</span>
-              <span class="truncate">${escapeHtml(t.title || 'New Chat')}</span>
-            </div>
-            <button class="delete-thread-btn material-symbols-outlined text-[15px] opacity-0 group-hover:opacity-100 text-outline hover:text-error transition-opacity" title="Delete">delete</button>
-          `;
+  async function newChat() {
+    closeRail();
+    const current = threads.find((t) => t.thread_id === currentId);
+    if (current && !current.message_count) { el.input.focus(); return; } // reuse the empty thread
+    const r = await api("POST", "/threads", { title: "New Chat" });
+    if (r.ok && r.data) { await loadThreads(); await openThread(r.data.thread_id); }
+    else { await openThread(null); } // first message will auto-create a thread
+    el.input.focus();
+  }
 
-          el.querySelector('.delete-thread-btn').addEventListener('click', async (e) => {
-            e.stopPropagation();
-            await fetch(`/api/threads/${t.thread_id}`, { method: 'DELETE' });
-            if (currentThreadId === t.thread_id) currentThreadId = null;
-            await loadThreads();
-          });
+  async function deleteThread(id) {
+    await api("DELETE", `/threads/${encodeURIComponent(id)}`);
+    const wasCurrent = id === currentId;
+    await loadThreads();
+    if (wasCurrent) await openThread(threads[0]?.thread_id ?? null);
+  }
 
-          el.addEventListener('click', () => {
-            currentThreadId = t.thread_id;
-            loadThreads();
-          });
+  async function send(text) {
+    const query = (text ?? el.input.value).trim();
+    if (!query || busy) return;
+    setBusy(true);
+    el.input.value = "";
+    autoGrow();
+    showWelcome(false);
+    el.messages.appendChild(userMessage(query));
+    const pending = pendingMessage();
+    el.messages.appendChild(pending);
+    scrollToEnd();
 
-          container.appendChild(el);
-        });
-
-        loadMessages(currentThreadId);
-      } catch (err) {
-        console.error('Error loading threads:', err);
-      }
-    }
-
-    async function createNewThread() {
-      try {
-        const res = await fetch('/api/threads', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ title: 'New Chat' })
-        });
-        const thread = await res.json();
-        currentThreadId = thread.thread_id;
+    try {
+      let r = await api("POST", "/chat", { query, thread_id: currentId });
+      if (r.status === 404) { currentId = null; r = await api("POST", "/chat", { query, thread_id: null }); }
+      pending.remove();
+      if (!r.ok || !r.data) {
+        const detail = r.data && typeof r.data.detail === "string" ? r.data.detail : `HTTP ${r.status}`;
+        el.messages.appendChild(errorMessage(`Could not get an answer (${detail}). Please try again.`));
+      } else {
+        currentId = r.data.thread_id;
+        el.messages.appendChild(assistantMessage(r.data.response, r.data.source_url, r.data));
         await loadThreads();
-      } catch (err) {
-        console.error('Error creating thread:', err);
       }
+    } catch {
+      pending.remove();
+      el.messages.appendChild(errorMessage("Cannot reach the backend server. Make sure it is running on port 8000."));
+    } finally {
+      setBusy(false);
+      scrollToEnd();
+      el.input.focus();
     }
+  }
 
-    async function loadMessages(threadId) {
-      if (!threadId) return;
-      try {
-        const res = await fetch(`/api/threads/${threadId}`);
-        const thread = await res.json();
-        const messages = thread.messages || [];
-        const chatHistory = document.getElementById('chat-history');
-        const welcomeSection = document.getElementById('welcome-section');
+  function setBusy(v) {
+    busy = v;
+    el.send.disabled = v;
+    el.input.setAttribute("aria-busy", String(v));
+  }
 
-        chatHistory.innerHTML = '';
-
-        if (messages.length === 0) {
-          welcomeSection.classList.remove('hidden');
-        } else {
-          welcomeSection.classList.add('hidden');
-          messages.forEach(msg => {
-            if (msg.role === 'user') {
-              chatHistory.appendChild(renderUserCard(msg.content, msg.created_at));
-            } else {
-              chatHistory.appendChild(renderAssistantCard(msg.content, msg.source_url));
-            }
-          });
-          window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-        }
-      } catch (err) {
-        console.error('Error loading messages:', err);
-      }
+  async function checkHealth() {
+    try {
+      const r = await api("GET", "/health");
+      const ok = r.ok && r.data && r.data.status === "healthy";
+      el.statusChip.className = `chip ${ok ? "verified" : "offline"}`;
+      el.statusText.textContent = ok ? "Online" : "Degraded";
+      el.statusChip.title = ok && r.data.llm_model ? `Backend healthy · ${r.data.llm_model}` : "Backend health check failed";
+    } catch {
+      el.statusChip.className = "chip offline";
+      el.statusText.textContent = "Offline";
+      el.statusChip.title = "Backend unreachable";
     }
+  }
 
-    function renderUserCard(content, createdAt) {
-      const el = document.createElement('div');
-      el.className = "flex justify-end items-start gap-3 pl-8";
-      el.innerHTML = `
-        <div class="p-3.5 rounded-lg bg-surface-container-high border border-outline-variant/40 max-w-xl text-on-surface shadow-sm">
-          <p class="font-body-md text-body-md leading-relaxed">${formatMarkdown(content)}</p>
-          <div class="flex items-center justify-end gap-1 mt-1 font-label-sm text-[10px] text-outline">
-            <span>Audited Session</span>
-          </div>
-        </div>
-        <div class="w-8 h-8 rounded bg-surface-container-highest border border-outline-variant/40 flex items-center justify-center shrink-0 text-on-surface-variant font-label-sm text-label-sm">
-          <span>CL</span>
-        </div>
-      `;
-      return el;
-    }
+  // ---------- UI wiring ----------
+  function autoGrow() {
+    el.input.style.height = "auto";
+    el.input.style.height = `${Math.min(el.input.scrollHeight, 160)}px`;
+  }
+  function openRail() { el.app.classList.add("rail-open"); el.railBtn.setAttribute("aria-expanded", "true"); }
+  function closeRail() { el.app.classList.remove("rail-open"); el.railBtn.setAttribute("aria-expanded", "false"); }
 
-    function renderAssistantCard(content, sourceUrl) {
-      const el = document.createElement('div');
-      el.className = "flex justify-start items-start gap-3 pr-4 sm:pr-8";
+  el.form.addEventListener("submit", (e) => { e.preventDefault(); send(); });
+  el.input.addEventListener("input", autoGrow);
+  el.input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey && !e.isComposing) { e.preventDefault(); send(); }
+  });
+  el.newChat.addEventListener("click", newChat);
+  el.railBtn.addEventListener("click", () => (el.app.classList.contains("rail-open") ? closeRail() : openRail()));
+  el.scrim.addEventListener("click", closeRail);
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRail(); });
+  el.threads.addEventListener("click", (e) => {
+    const li = e.target.closest(".thread");
+    if (!li) return;
+    if (e.target.closest(".thread-del")) deleteThread(li.dataset.id);
+    else { closeRail(); openThread(li.dataset.id); }
+  });
 
-      // Detect refusal
-      const isRefusal = /cannot provide investment advice|facts-only assistant|personal identifiers|non-advisory/i.test(content);
-
-      if (isRefusal) {
-        el.innerHTML = `
-          <div class="w-8 h-8 rounded bg-tertiary-container/30 border border-tertiary/40 flex items-center justify-center shrink-0 text-tertiary shadow-sm">
-            <span class="material-symbols-outlined text-[18px]">gavel</span>
-          </div>
-          <div class="flex-1 flex flex-col gap-3 max-w-3xl">
-            <div class="p-4 sm:p-5 rounded-lg bg-surface-container-low border border-tertiary/30 border-l-4 border-l-tertiary flex flex-col gap-3 shadow-lg">
-              <div class="flex items-center justify-between flex-wrap gap-2">
-                <span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-tertiary/10 text-tertiary border border-tertiary/30 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[13px]">shield</span>
-                  <span>REGULATORY NON-ADVISORY GUARD</span>
-                </span>
-                <span class="font-label-sm text-label-sm text-outline">SEBI Grounding</span>
-              </div>
-              <div class="font-body-md text-body-md text-on-surface leading-relaxed">${formatMarkdown(content)}</div>
-            </div>
-          </div>
-        `;
-        return el;
-      }
-
-      // Clean citation tags from text for display
-      let cleanText = content.replace(/\[Source:\s*[^\s\]]+\]/g, '').replace(/\[Scraped:\s*[^\s\]]+\]/g, '').replace(/📎\s*Source:\s*https?:\/\/[^\s\n\)]+/g, '').replace(/_Last updated from sources:[^_]+_/g, '').trim();
-
-      // Extract quick metric pills if present
-      let metricHtml = '';
-      const terMatch = cleanText.match(/(?:Expense Ratio|TER)[^0-9]*(\d+(?:\.\d+)?\s*%)/i);
-      const navMatch = cleanText.match(/(?:NAV|Net Asset Value)[^0-9₹]*₹?\s*(\d+(?:\.\d+)?)/i);
-      const aumMatch = cleanText.match(/(?:AUM|assets)[^0-9₹]*₹?\s*([\d,]+(?:\.\d+)?\s*(?:Cr|Crore))/i);
-
-      if (terMatch || navMatch || aumMatch) {
-        metricHtml = '<div class="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">';
-        if (terMatch) {
-          metricHtml += `
-            <div class="p-2.5 rounded bg-surface-container border border-outline-variant/20 flex flex-col">
-              <span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Expense Ratio</span>
-              <span class="font-label-lg text-label-lg font-bold text-on-surface mt-0.5">${terMatch[1]}</span>
-              <span class="font-label-sm text-[9px] text-secondary">Direct (Incl GST)</span>
-            </div>
-          `;
-        }
-        if (navMatch) {
-          metricHtml += `
-            <div class="p-2.5 rounded bg-surface-container border border-outline-variant/20 flex flex-col">
-              <span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Current NAV</span>
-              <span class="font-label-lg text-label-lg font-bold text-primary mt-0.5">₹${navMatch[1]}</span>
-              <span class="font-label-sm text-[9px] text-outline">Official Close</span>
-            </div>
-          `;
-        }
-        if (aumMatch) {
-          metricHtml += `
-            <div class="p-2.5 rounded bg-surface-container border border-outline-variant/20 flex flex-col">
-              <span class="font-label-sm text-[10px] text-outline uppercase tracking-wider">Fund AUM</span>
-              <span class="font-label-lg text-label-lg font-bold text-on-surface mt-0.5">₹${aumMatch[1]}</span>
-              <span class="font-label-sm text-[9px] text-outline">Total Assets</span>
-            </div>
-          `;
-        }
-        metricHtml += '</div>';
-      }
-
-      let citationHtml = '';
-      if (sourceUrl) {
-        citationHtml = `
-          <div class="mt-2 p-2.5 rounded bg-surface-container/60 border border-outline-variant/20 flex items-center justify-between flex-wrap gap-2 text-[11px] font-label-md">
-            <div class="flex items-center gap-2 truncate">
-              <span class="material-symbols-outlined text-[15px] text-secondary shrink-0">link</span>
-              <span class="text-outline truncate">Source: <span class="text-on-surface underline">${escapeHtml(sourceUrl)}</span></span>
-              <span class="px-1.5 py-0.2 rounded bg-secondary/10 text-secondary text-[10px] font-label-sm">Fetched &amp; Verified</span>
-            </div>
-            <a class="text-primary hover:underline flex items-center gap-1 font-label-sm" href="${escapeHtml(sourceUrl)}" rel="noopener noreferrer" target="_blank">
-              Direct Filing Link [Open ↗]
-            </a>
-          </div>
-        `;
-      }
-
-      el.innerHTML = `
-        <div class="w-8 h-8 rounded bg-primary-container border border-primary/40 flex items-center justify-center shrink-0 text-on-primary-container shadow-sm">
-          <span class="material-symbols-outlined text-[18px]">account_balance</span>
-        </div>
-        <div class="flex-1 flex flex-col gap-3 max-w-3xl">
-          <div class="p-4 sm:p-5 rounded-lg bg-surface-container-low border border-outline-variant/30 border-l-4 border-l-primary-container flex flex-col gap-3 shadow-lg">
-            <div class="flex items-center justify-between flex-wrap gap-2">
-              <div class="flex items-center gap-2">
-                <span class="px-2 py-0.5 rounded font-label-sm text-label-sm bg-secondary/10 text-secondary border border-secondary/30 flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[13px]">verified</span>
-                  <span>VERIFIED FACTUAL</span>
-                </span>
-                <span class="font-label-sm text-label-sm text-outline">HDFC Mutual Fund Scheme</span>
-              </div>
-              <span class="font-label-sm text-label-sm text-outline">Groww Scheme Feed: Verified</span>
-            </div>
-            <div class="font-body-md text-body-md text-on-surface leading-relaxed">${formatMarkdown(cleanText)}</div>
-            ${metricHtml}
-            ${citationHtml}
-          </div>
-        </div>
-      `;
-      return el;
-    }
-
-    async function handleFormSubmit(e) {
-      if (e) e.preventDefault();
-      const input = document.getElementById('query-input');
-      const query = input.value.trim();
-      if (!query) return;
-
-      input.value = '';
-      const chatHistory = document.getElementById('chat-history');
-      document.getElementById('welcome-section').classList.add('hidden');
-
-      chatHistory.appendChild(renderUserCard(query, new Date().toISOString()));
-
-      // Loading card
-      const loadingEl = document.createElement('div');
-      loadingEl.className = "flex justify-start items-center gap-3 p-4 text-outline font-label-sm text-xs";
-      loadingEl.innerHTML = `<span class="inline-block w-2 h-2 rounded-full bg-secondary animate-ping"></span> <span>Retrieving verified facts & generating response...</span>`;
-      chatHistory.appendChild(loadingEl);
-      window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-
-      try {
-        const res = await fetch('/api/chat', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ query: query, thread_id: currentThreadId })
-        });
-        const data = await res.json();
-        loadingEl.remove();
-
-        if (data.thread_id) {
-          currentThreadId = data.thread_id;
-        }
-
-        chatHistory.appendChild(renderAssistantCard(data.response, data.source_url));
-        loadThreads();
-        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
-      } catch (err) {
-        loadingEl.remove();
-        console.error('Chat error:', err);
-      }
-    }
-
-    function selectStarter(q) {
-      document.getElementById('query-input').value = q;
-      handleFormSubmit();
-    }
-
-    document.getElementById('btn-new-query').addEventListener('click', createNewThread);
-    document.getElementById('btn-new-session').addEventListener('click', createNewThread);
-
-    // Initial load
-    window.addEventListener('DOMContentLoaded', loadThreads);
-  </script>
+  // ---------- boot ----------
+  document.title = "HDFC Fund Facts Assistant";
+  renderStarters();
+  checkHealth();
+  loadThreads().then(() => openThread(threads[0]?.thread_id ?? null));
+})();
+</script>
 </body>
 </html>
-

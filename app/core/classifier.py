@@ -71,6 +71,9 @@ ADVISORY_PATTERNS = [
     r"\bjailbreak\b",
     r"\bdan\s+mode\b",
     r"\bact\s+as\s+a\s+(?:financial|investment)\s+advisor\b",
+    # Future-oriented questions about factual parameters (edge-cases.md §2.3)
+    r"\bwill\s+(?:the|it|its|this)\b.{0,60}\b(?:change|increase|decrease|rise|fall|drop|go\s+up|go\s+down)\b",
+    r"\b(?:next|coming)\s+(?:year|month|quarter)\b.{0,40}\b(?:nav|price|returns?)\b",
 ]
 
 COMPARATIVE_PATTERNS = [
@@ -130,7 +133,12 @@ FACTUAL_PATTERNS = [
     r"\bhow\s+to\s+(?:invest|redeem|switch|cancel)\b",
     r"\b(?:pe|pb)\s+ratio\b",
     r"\bstatement\s+download\b",
+    r"\b(?:download|get|obtain|generate|request)\b.{0,40}\bstatements?\b",
+    r"\b(?:account|capital\s+gains?|cas|consolidated)\s+statements?\b",
     r"\bcapital\s+gains\s+report\b",
+    r"\belss\b",
+    r"\bscheme\s+category\b",
+    r"\bfund\s+category\b",
 ]
 
 

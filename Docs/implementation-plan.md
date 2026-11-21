@@ -3,8 +3,9 @@
 > **Project:** RAG-based Facts-Only Mutual Fund FAQ Assistant  
 > **AMC:** HDFC Mutual Fund (HDFC AMC)  
 > **Reference Docs:** [problemstatement.md](./problemstatement.md) · [architecture.md](./architecture.md)  
-> **Version:** 1.0  
-> **Created:** 2026-10-25
+> **Version:** 1.1  
+> **Created:** 2026-10-25  
+> **Updated:** 2026-11-21 — added Phase 7 (Daily Data Refresh via GitHub Actions); Documentation & Delivery moved to Phase 8
 
 ---
 
@@ -19,9 +20,10 @@ flowchart LR
     P4["Phase 4\nMulti-Thread Chat\n~1 day"]
     P5["Phase 5\nFrontend UI\n~1.5 days"]
     P6["Phase 6\nIntegration &\nEnd-to-End Testing\n~1.5 days"]
-    P7["Phase 7\nDocumentation &\nDelivery\n~1 day"]
+    P7["Phase 7\nDaily Data Refresh\n(GitHub Actions)\n~1.5 days"]
+    P8["Phase 8\nDocumentation &\nDelivery\n~1 day"]
 
-    P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7
+    P0 --> P1 --> P2 --> P3 --> P4 --> P5 --> P6 --> P7 --> P8
 
     style P0 fill:#e0e0e0,stroke:#616161
     style P1 fill:#bbdefb,stroke:#1565c0
@@ -30,7 +32,8 @@ flowchart LR
     style P4 fill:#d1c4e9,stroke:#6a1b9a
     style P5 fill:#ffe0b2,stroke:#e65100
     style P6 fill:#ffcdd2,stroke:#c62828
-    style P7 fill:#b2dfdb,stroke:#00695c
+    style P7 fill:#f8bbd0,stroke:#ad1457
+    style P8 fill:#b2dfdb,stroke:#00695c
 ```
 
 | Phase | Name | Duration | Dependencies |
@@ -42,8 +45,9 @@ flowchart LR
 | **4** | Multi-Thread Chat Management | 1 day | Phase 0 |
 | **5** | Frontend (Streamlit UI) | 1.5 days | Phases 3, 4 |
 | **6** | Integration & End-to-End Testing | 1.5 days | Phase 5 |
-| **7** | Documentation & Delivery | 1 day | Phase 6 |
-| | **Total Estimated** | **~10.5 days** | |
+| **7** | Daily Data Refresh (GitHub Actions Scheduler) | 1.5 days | Phases 1, 6 |
+| **8** | Documentation & Delivery | 1 day | Phase 7 |
+| | **Total Estimated** | **~12 days** | |
 
 > [!NOTE]
 > Phases 3 and 4 can be worked on in parallel since they have no mutual dependency — Phase 3 depends on Phase 2, and Phase 4 only depends on Phase 0.
@@ -487,25 +491,179 @@ flowchart TD
 
 ---
 
-## Phase 7: Documentation & Delivery
+## Phase 7: Daily Data Refresh (GitHub Actions Scheduler)
 
-**Goal:** Write the README, finalize all documentation, clean up code, and prepare the project for submission/handoff.
+**Goal:** Keep the knowledge base current without manual work. A scheduled GitHub Actions workflow runs **every day at 10:00 AM IST** and rebuilds the corpus from the live Groww pages through every stage: **scrape → normalize → clean → chunk → embed → store in ChromaDB**. It publishes the new index only if it passes a validation gate. The app then serves answers (and the "Last updated from sources" footer) from the latest data.
 
-**Duration:** 1 day
+**Duration:** 1.5 days
 
-**Depends on:** Phase 6
+**Depends on:** Phase 1 (ingestion pipeline), Phase 6 (test suite used as the regression gate)
+
+### Current-State Gaps This Phase Closes
+
+| Gap (as of Phase 6) | Consequence | Fix in this phase |
+| :--- | :--- | :--- |
+| Ingestion only runs by hand (`python scripts/ingest.py`) | Facts (NAV, AUM, TER, exit load) go stale silently | Scheduled workflow (7.1) |
+| No separate normalization or cleaning stage; scraper output goes straight to the chunker | Formatting drift between runs (`0.74 %` vs `0.74%`, `Rs.` vs `₹`) changes chunk text and retrieval scores | `normalizer.py` + `cleaner.py` (7.3, 7.4) |
+| `data/chroma/` and `data/vectorstore/` are git-ignored; Actions runners are ephemeral | Anything the runner builds is lost when the job ends | Snapshot publishing (7.8) |
+| Scraper defaults to `BROWSER_TYPE=edge` | Edge is not the standard browser on `ubuntu-latest` runners | Run with `BROWSER_TYPE=chrome` (7.2) |
+| Footer date falls back to a hard-coded `2026-10-25` (`formatter.py`, `chroma_store.py`, `pinecone_store.py`) | After a refresh the UI would still show the old date | Read the date from snapshot metadata (7.9) |
+| Running backend caches the index (`MutualFundRetriever._is_loaded`) | A new snapshot is ignored until restart | Hot reload on snapshot change (7.9) |
+
+### Schedule
+
+| Item | Value |
+| :--- | :--- |
+| Target time | **10:00 AM IST** daily |
+| Cron (GitHub Actions uses UTC; IST = UTC+5:30, no DST) | `30 4 * * *` |
+| Manual trigger | `workflow_dispatch` (Actions tab, or `gh workflow run daily-data-refresh.yml`) |
+| Branch | Schedules run only from the **default branch**, so the workflow file must be merged there |
+| Overlap protection | `concurrency: { group: daily-data-refresh, cancel-in-progress: false }` |
+| Timeout | `timeout-minutes: 30` (5 pages × up to 3 retries with backoff) |
+
+> [!NOTE]
+> GitHub may start scheduled runs **5–30 minutes late** at busy times, so "10:00 AM" means "shortly after 10:00 AM". GitHub also **disables scheduled workflows after 60 days with no repository activity** in public repos; the daily snapshot push (7.8) counts as activity and keeps the schedule alive.
+
+### Pipeline Stages
+
+```mermaid
+flowchart LR
+    A["1. Scrape\nSelenium + headless Chrome\n→ data/raw/*.html"] --> B["2. Normalize\nunicode, ₹ / %, dates,\nwhitespace, labels"]
+    B --> C["3. Clean\nboilerplate, duplicates,\nCAPTCHA / empty-page checks"]
+    C --> D["4. Chunk\nsection + Q&A chunks,\ndeterministic IDs"]
+    D --> E["5. Embed\nTF-IDF + BM25 fit"]
+    E --> F["6. Store\nChromaDB staging collection"]
+    F --> G{"7. Validate\nquality gate +\nPhase 6 tests"}
+    G -->|pass| H["8. Publish snapshot\n+ swap live collection"]
+    G -->|fail| I["Keep previous snapshot\nopen/update GitHub issue"]
+```
 
 ### Tasks
 
 | # | Task | Details | Output |
 | :---: | :--- | :--- | :--- |
-| 7.1 | **Write `README.md`** | Comprehensive README covering: project overview, selected AMC (HDFC) and schemes (5), architecture overview with diagram, setup instructions (step-by-step), how to run ingestion, how to start backend + frontend, example queries and expected responses, known limitations, disclaimer. | `README.md` |
-| 7.2 | **Finalize architecture doc** | Update [architecture.md](./architecture.md) with any changes made during implementation (e.g., adjusted chunk sizes, changed models, new endpoints). | Updated `architecture.md` |
-| 7.3 | **Code cleanup** | Add docstrings to all public functions/classes. Remove debug prints. Ensure consistent formatting (`black` or `ruff format`). Remove unused imports. | Clean codebase |
-| 7.4 | **Add inline disclaimer** | Ensure the disclaimer "Facts-only. No investment advice." appears in: (a) Streamlit UI header, (b) welcome message, (c) README, (d) API health response. | Disclaimer everywhere |
-| 7.5 | **Create `scripts/reset_db.py`** | Utility script to reset: vector store (delete and recreate collection), chat database (drop and recreate tables). Useful for clean re-deployments. | `scripts/reset_db.py` |
-| 7.6 | **Final smoke test** | Fresh clone → install deps → run ingestion → start servers → complete a full user journey (create thread, ask 3 factual questions, ask 1 advisory question, verify refusal, switch threads). | End-to-end verified |
-| 7.7 | **Tag release** | `git tag v1.0.0` and push. | Git tag |
+| 7.1 | **Create the scheduled workflow** | Add `.github/workflows/daily-data-refresh.yml` with `on: schedule: cron "30 4 * * *"` plus `workflow_dispatch`. Runs on `ubuntu-latest` with Python 3.11 and pip caching, `TZ=Asia/Kolkata` (so `scrape_date` is the IST date), `concurrency` and `timeout-minutes: 30`. Least-privilege `permissions: contents: write, issues: write`. | Workflow file |
+| 7.2 | **Make scraping runner-safe** | Set `BROWSER_TYPE=chrome` (Chrome is preinstalled on `ubuntu-latest`). Keep headless, `--no-sandbox`, `--disable-dev-shm-usage`. Always fetch live pages; `data/raw/` is written as an audit copy, never read back as a cache. Detect CAPTCHA or bot-block pages and fail that URL instead of indexing it. Record a `sha256` of each page's text in the run metadata. | Updated `app/ingestion/scraper.py` |
+| 7.3 | **Add a normalization stage** | New `app/ingestion/normalizer.py`, a pure function `normalize(doc) -> doc`. It applies: Unicode NFKC; collapse whitespace; `Rs.` / `INR` / `Rs` → `₹`; `0.74 %` → `0.74%`; strip thousands separators *inside* numbers only for matching (display text keeps them); dates → ISO `YYYY-MM-DD`; consistent field labels (`TER` / `Total Expense Ratio` → `Expense Ratio`); exit-load `Nil` / `0%` / `No exit load` → `Nil`. The output is deterministic, so unchanged pages produce identical text. | `normalizer.py` |
+| 7.4 | **Add a cleaning stage** | New `app/ingestion/cleaner.py`. It removes navigation, footer, cookie and ad text, "similar funds" and promotional blocks; drops duplicate paragraphs and empty sections. It rejects a page whose cleaned text is under 200 chars (edge-cases.md §7.2) or that lacks a Key Facts section. | `cleaner.py` |
+| 7.5 | **Deterministic chunking** | Chunk IDs = `sha1(source_url + section_heading + chunk_index)` (edge-cases.md §7.10), so re-runs **upsert** instead of duplicating. After the upsert, delete IDs that no longer exist (stale chunks from removed sections). Every chunk carries `scrape_date` (run date) and `run_id` (`GITHUB_RUN_ID`). | Updated `chunker.py` / `indexer.py` |
+| 7.6 | **Embed and store in a staging ChromaDB collection** | Fit the TF-IDF + BM25 embedder on the new corpus. Write to a **staging** location (`data/chroma_staging/`, collection `mf_faq_staging`) with `VECTOR_DB_PROVIDER=chromadb`, never directly over the live index. Write `data/metadata.json` with `generated_at`, `scrape_date`, `run_id`, `git_sha`, per-scheme chunk counts and page hashes. | Staging index + metadata |
+| 7.7 | **Validation gate** | New `scripts/validate_index.py`, run against the staging index. **Fail** (block publish) if: any of the 5 schemes is missing; a scheme has fewer than 5 chunks; a Key Facts chunk is missing; any core field (expense ratio, exit load, minimum SIP, benchmark, riskometer) can't be found per scheme; any chunk lacks `source_url` or `scrape_date`; or `pytest tests/test_phase6_integration.py` fails against the staging index. **Warn** only (in the job summary) if: a core numeric value changed vs the previous snapshot, or the chunk count moved by more than 30%. Expected daily changes such as NAV are listed, not blocked. | `validate_index.py` |
+| 7.8 | **Publish the snapshot** | Runners are ephemeral and `data/chroma/` is git-ignored, so the workflow must **persist** the validated index (see *Snapshot Storage Decision* below). On pass: promote staging → live (`data/chroma/`, `data/vectorstore/`, `data/metadata.json`) and force-push them as a single commit to the orphan branch **`data-snapshot`** (`data: refresh YYYY-MM-DD (run <id>)`). Upload the same files as a workflow artifact (14-day retention) for debugging. | Published snapshot |
+| 7.9 | **App picks up new data** | (a) New `scripts/sync_data.py` fetches `origin/data-snapshot` and copies `data/chroma`, `data/vectorstore` and `data/metadata.json` into place atomically (write to a temp dir, then rename). (b) The retriever checks `data/metadata.json` `generated_at` at most once per minute and reloads the index when it changes, with no restart. (c) Replace the hard-coded `2026-10-25` fallbacks with `metadata.json` `scrape_date`, so the footer shows the real refresh date. | Hot-reload + correct footer |
+| 7.10 | **Failure handling & alerting** | Any failed stage stops the job **before** publishing, so the previous snapshot stays live and users keep getting answers. On failure, a final `if: failure()` step opens a GitHub issue labelled `data-refresh-failure` with the failing stage and run link, or comments on the open one. A later successful run closes it. Every run writes a **job summary**: per-stage timings, pages scraped, chunks per scheme, validation warnings, and the diff of core facts vs the previous snapshot. | Alerts + run report |
+| 7.11 | **Tests** | `tests/test_normalizer.py` (₹/%/date/label rules, idempotence: `normalize(normalize(x)) == normalize(x)`); `tests/test_cleaner.py` (boilerplate removal, short/CAPTCHA page rejection); `tests/test_ingestion_validation.py` (gate fails on missing scheme, missing Key Facts or stale `scrape_date`; passes on a good fixture); a test that re-ingesting the same fixture twice yields identical chunk IDs and no duplicates. | Test files |
+| 7.12 | **Dry run & first scheduled run** | Trigger via `workflow_dispatch` and verify the snapshot branch, job summary and app footer date. Then let it run on schedule for 3 consecutive days, checking each run's summary and that one run with a forced failure (e.g. a bad URL in a test branch) opens an issue and leaves the live snapshot untouched. | Verified automation |
+
+### Snapshot Storage Decision
+
+| Option | How it works | Pros | Cons | Use when |
+| :--- | :--- | :--- | :--- | :--- |
+| **A. Orphan `data-snapshot` branch, force-pushed** *(chosen)* | Workflow commits only `data/` to a branch with no shared history and force-pushes one commit per day | No external service; inspectable on GitHub; `git fetch` is the sync; history doesn't grow (~8 MB `chroma.sqlite3` replaced, not appended) | Requires `contents: write`; app host must be able to `git fetch` | Local / single-server deployment (current setup) |
+| B. GitHub Release asset (`data-latest`) | Workflow zips `data/` and replaces the asset on a fixed release | No branch clutter; simple HTTPS download | Needs a download + unzip step; release UI shows churn | App host has no git checkout |
+| C. Hosted ChromaDB (Chroma Cloud / self-hosted `HttpClient`) | Workflow upserts straight into a remote collection, then swaps an alias | App always reads live data; no sync step | Extra service, secret (`CHROMA_API_KEY`), network dependency at query time | App is deployed to the cloud |
+
+> [!IMPORTANT]
+> Do **not** commit the index to `main` daily. A ~8 MB SQLite file committed every day adds ~3 GB of git history a year. Option A avoids this by force-pushing a single-commit orphan branch.
+
+### Workflow Sketch
+
+```yaml
+# .github/workflows/daily-data-refresh.yml
+name: Daily data refresh
+on:
+  schedule:
+    - cron: "30 4 * * *"          # 04:30 UTC = 10:00 IST
+  workflow_dispatch: {}
+permissions:
+  contents: write                 # push data-snapshot branch
+  issues: write                   # failure alerts
+concurrency:
+  group: daily-data-refresh
+  cancel-in-progress: false
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      TZ: Asia/Kolkata
+      BROWSER_TYPE: chrome
+      VECTOR_DB_PROVIDER: chromadb
+      CHROMA_DB_PATH: ./data/chroma_staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.11", cache: pip }
+      - run: pip install -r requirements.txt
+      - name: Fetch previous snapshot (for diff)
+        run: git fetch origin data-snapshot --depth=1 || echo "first run"
+      - name: Scrape → normalize → clean → chunk → embed → store (staging)
+        run: python scripts/ingest.py --staging --run-id "$GITHUB_RUN_ID"
+      - name: Validation gate
+        run: python scripts/validate_index.py --staging --previous origin/data-snapshot --summary "$GITHUB_STEP_SUMMARY"
+      - name: Promote staging and publish snapshot
+        run: python scripts/publish_snapshot.py --branch data-snapshot
+      - uses: actions/upload-artifact@v4
+        with: { name: data-snapshot-${{ github.run_id }}, path: data/, retention-days: 14 }
+      - name: Alert on failure
+        if: failure()
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: python scripts/report_failure.py --run-url "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+```
+
+> [!NOTE]
+> Ingestion uses local TF-IDF/BM25 embeddings, so the workflow needs **no secrets**: `GROQ_API_KEY` is not required to rebuild the index. If a live LLM spot-check is added later, store the key as an Actions secret, never in the repo.
+
+### Files Created / Modified
+
+```
+.github/workflows/daily-data-refresh.yml   # NEW — scheduler (7.1)
+app/ingestion/normalizer.py                # NEW — normalization stage (7.3)
+app/ingestion/cleaner.py                   # NEW — cleaning stage (7.4)
+app/ingestion/scraper.py                   # runner-safe, CAPTCHA detection, page hashes (7.2)
+app/ingestion/chunker.py, indexer.py       # deterministic IDs, upsert + stale delete, run_id (7.5)
+app/ingestion/chroma_store.py              # staging collection + promote (7.6)
+app/core/retriever.py                      # hot reload on metadata change (7.9)
+app/core/formatter.py                      # footer date from metadata (7.9)
+scripts/ingest.py                          # --staging, --run-id, explicit stages (7.6)
+scripts/validate_index.py                  # NEW — quality gate (7.7)
+scripts/publish_snapshot.py                # NEW — promote + push data-snapshot (7.8)
+scripts/sync_data.py                       # NEW — app-side snapshot sync (7.9)
+scripts/report_failure.py                  # NEW — issue on failure (7.10)
+tests/test_normalizer.py, test_cleaner.py, test_ingestion_validation.py   # NEW (7.11)
+```
+
+### Acceptance Criteria
+- [ ] The workflow runs automatically every day at 04:30 UTC (10:00 IST) and on demand via `workflow_dispatch`.
+- [ ] A successful run executes all six stages (scrape, normalize, clean, chunk, embed, store in ChromaDB) and logs per-stage counts and timings in the job summary.
+- [ ] Every chunk in the published snapshot has `scrape_date` equal to the run date (IST) and the run's `run_id`.
+- [ ] Re-running on the same day is idempotent: same chunk IDs, no duplicates, no stale chunks.
+- [ ] The validation gate blocks publishing on a missing scheme, < 5 chunks, missing Key Facts, missing core fields, a CAPTCHA page or failing Phase 6 tests; the previous snapshot stays live.
+- [ ] A failed run opens (or updates) a `data-refresh-failure` issue; the next successful run closes it.
+- [ ] After `scripts/sync_data.py`, the running backend serves the new data without a restart, and the UI footer shows the new "Last updated from sources" date.
+- [ ] Repository size does not grow day over day (single-commit `data-snapshot` branch).
+
+---
+
+## Phase 8: Documentation & Delivery
+
+**Goal:** Write the README, finalize all documentation, clean up code, and prepare the project for submission/handoff.
+
+**Duration:** 1 day
+
+**Depends on:** Phase 7
+
+### Tasks
+
+| # | Task | Details | Output |
+| :---: | :--- | :--- | :--- |
+| 8.1 | **Write `README.md`** | Comprehensive README covering: project overview, selected AMC (HDFC) and schemes (5), architecture overview with diagram, setup instructions (step-by-step), how to run ingestion, how the daily data refresh works (schedule, `data-snapshot` branch, `scripts/sync_data.py`, manual trigger), how to start backend + frontend, example queries and expected responses, known limitations, disclaimer. | `README.md` |
+| 8.2 | **Finalize architecture doc** | Update [architecture.md](./architecture.md) with any changes made during implementation (e.g., adjusted chunk sizes, changed models, new endpoints, the normalize/clean stages and the scheduled refresh flow from Phase 7). | Updated `architecture.md` |
+| 8.3 | **Code cleanup** | Add docstrings to all public functions/classes. Remove debug prints. Ensure consistent formatting (`black` or `ruff format`). Remove unused imports. | Clean codebase |
+| 8.4 | **Add inline disclaimer** | Ensure the disclaimer "Facts-only. No investment advice." appears in: (a) Streamlit UI header, (b) welcome message, (c) README, (d) API health response. | Disclaimer everywhere |
+| 8.5 | **Create `scripts/reset_db.py`** | Utility script to reset: vector store (delete and recreate collection), chat database (drop and recreate tables). Useful for clean re-deployments. | `scripts/reset_db.py` |
+| 8.6 | **Final smoke test** | Fresh clone → install deps → run ingestion (or `scripts/sync_data.py` to pull the latest snapshot) → start servers → complete a full user journey (create thread, ask 3 factual questions, ask 1 advisory question, verify refusal, switch threads). | End-to-end verified |
+| 8.7 | **Tag release** | `git tag v1.0.0` and push. | Git tag |
 
 ### README Structure
 
@@ -522,6 +680,7 @@ flowchart TD
   ### 1. Run Ingestion Pipeline
   ### 2. Start Backend Server
   ### 3. Start Frontend
+## Daily Data Refresh (GitHub Actions)
 ## Example Queries
 ## Known Limitations
 ## Disclaimer
@@ -547,6 +706,10 @@ flowchart TD
 | R4 | **Classifier false positives** (factual query classified as advisory) | Medium | Medium | Tune heuristic keywords carefully. Use the LLM Layer 2 classifier for ambiguous cases. Maintain a test suite and iterate. |
 | R5 | **LLM generates advisory content despite prompt** | High | Low | Response formatter scans for advisory keywords. System prompt is explicit. Low temperature (0.1) reduces creative drift. |
 | R6 | **ChromaDB performance at scale** | Low | Low | Current corpus is small (15–25 docs, ~200 chunks). ChromaDB handles this easily. Not a concern for MVP. |
+| R7 | **Groww blocks GitHub-hosted runner IPs** (datacenter IPs, CAPTCHA) | High | Medium | Scraper retries with backoff; CAPTCHA pages are detected and rejected; the validation gate keeps the previous snapshot live; failure opens an issue. If blocks persist, run the workflow on a self-hosted runner or trigger it manually from a trusted machine. |
+| R8 | **Page layout change silently corrupts facts** | High | Medium | Cleaner rejects pages without a Key Facts section; validation gate requires all core fields per scheme; job summary diffs core values against the previous snapshot so unexpected changes are visible. |
+| R9 | **Scheduled run delayed or auto-disabled** | Medium | Low | GitHub may delay cron runs and disables schedules after 60 days without repo activity; the daily snapshot push counts as activity, and `workflow_dispatch` allows a manual run at any time. |
+| R10 | **Repository bloat from daily index commits** | Medium | High (if committed to `main`) | Publish to a single-commit orphan `data-snapshot` branch that is force-pushed (Phase 7 Option A); never commit `data/chroma/` to `main`. |
 
 ---
 
@@ -561,20 +724,24 @@ flowchart TD
     P4["Phase 4\nChat Manager"]
     P5["Phase 5\nUI + API"]
     P6["Phase 6\nE2E Testing"]
-    P7["Phase 7\nDocs & Delivery"]
+    P7["Phase 7\nDaily Data Refresh"]
+    P8["Phase 8\nDocs & Delivery"]
 
     P0 --> P1
     P0 --> P4
     P1 --> P2
+    P1 --> P7
     P2 --> P3
     P3 --> P5
     P4 --> P5
     P5 --> P6
     P6 --> P7
+    P7 --> P8
 ```
 
 > [!IMPORTANT]
-> **Critical Path:** Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 5 → Phase 6 → Phase 7 (9 days).  
+> **Critical Path:** Phase 0 → Phase 1 → Phase 2 → Phase 3 → Phase 5 → Phase 6 → Phase 7 → Phase 8 (11 days).  
+> **Phase 7 prep:** The normalizer and cleaner (7.3, 7.4) only depend on Phase 1 and can be built early; the validation gate (7.7) needs the Phase 6 test suite.  
 > **Parallel Track:** Phase 4 (Chat Manager) can start as soon as Phase 0 completes, running alongside Phases 1–3, saving ~1 day on the total timeline.
 
 ---
@@ -588,8 +755,13 @@ python -m venv .venv
 pip install -r requirements.txt
 copy .env.example .env          # then edit .env with your API keys
 
-# === Ingestion (one-time) ===
+# === Ingestion (one-time / local) ===
 python scripts/ingest.py
+
+# === Daily data refresh (Phase 7) ===
+gh workflow run daily-data-refresh.yml          # trigger a refresh now
+gh run list --workflow daily-data-refresh.yml   # check recent runs
+python scripts/sync_data.py                     # pull latest data-snapshot into data/
 
 # === Run Application ===
 # Terminal 1 — Backend

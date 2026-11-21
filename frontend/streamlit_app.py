@@ -1,437 +1,378 @@
-"""Streamlit frontend for HDFC Mutual Fund Facts-Only Assistant.
-Styled with Obsidian Factstream dark palette and rock-solid native components.
+"""Streamlit frontend for the HDFC Mutual Fund FAQ Assistant (Phase 5).
+
+Layout (architecture.md §8.1):
+- Header: app title + persistent "Facts-only. No investment advice." badge
+- Sidebar: "New Chat" button, thread list (click to switch, delete per thread), active thread highlighted
+- Main area: welcome card with 3 clickable example questions on empty threads, otherwise chat history
+- Bottom: chat input; spinner while the backend classifies, retrieves and generates
+
+All data comes from the FastAPI backend (`API_URL`). If the backend is not reachable, the app
+falls back to calling the same chat manager / RAG pipeline in-process, mirroring the API semantics.
 """
 
-import html
-import logging
 import os
 import re
 import socket
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+import sys
+from typing import Any, Dict, Optional, Tuple
+from urllib.parse import urlparse
+
 import requests
 import streamlit as st
 
-# Configure page metadata & layout
 st.set_page_config(
-    page_title="HDFC Mutual Fund Facts-Only Assistant",
+    page_title="HDFC Mutual Fund FAQ Assistant",
     page_icon="🏦",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
-# API Base URL
-API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000/api")
+API_URL = os.environ.get("API_URL", "http://127.0.0.1:8000/api").rstrip("/")
+DISCLAIMER = "Facts-only. No investment advice."
 
-# Fallback imports if FastAPI backend is run in-process
+EXAMPLE_QUESTIONS = [
+    ("📊 Expense ratio", "What is the expense ratio of HDFC Mid Cap Fund Direct Growth?"),
+    ("⏱️ Exit load", "What is the exit load for HDFC Small Cap Fund?"),
+    ("💰 Minimum SIP", "What is the minimum SIP amount for HDFC Large Cap Fund?"),
+]
+
+COVERED_SCHEMES = [
+    "HDFC Mid-Cap Opportunities Fund",
+    "HDFC Small Cap Fund",
+    "HDFC Large Cap Fund",
+    "HDFC Silver ETF FoF",
+    "HDFC Multi Cap Fund",
+]
+
+# In-process fallback (used only when the FastAPI server is down)
+PROJECT_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 try:
     from app.chat.manager import chat_manager
-    from app.core.generator import rag_pipeline
+    from app.core.rag_pipeline import rag_pipeline
+
     HAS_LOCAL_BACKEND = True
-except Exception:
+except Exception:  # pragma: no cover - depends on environment
     HAS_LOCAL_BACKEND = False
 
 
-def is_backend_alive(host: str = "127.0.0.1", port: int = 8000) -> bool:
-    """Fast TCP probe to verify if FastAPI server is up in < 80ms."""
+# ==============================================================================
+# API CLIENT
+# ==============================================================================
+def is_backend_alive() -> bool:
+    """Fast TCP probe of the host/port in API_URL."""
+    parsed = urlparse(API_URL)
+    host = parsed.hostname or "127.0.0.1"
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
     try:
-        with socket.create_connection((host, port), timeout=0.08):
+        with socket.create_connection((host, port), timeout=0.15):
             return True
     except OSError:
         return False
 
 
-def api_request(method: str, endpoint: str, json_data=None):
-    """Makes HTTP request to FastAPI backend with instant fallback."""
-    if not is_backend_alive() and HAS_LOCAL_BACKEND:
-        return local_fallback_request(method, endpoint, json_data)
+def api_request(method: str, endpoint: str, json_data: Optional[dict] = None) -> Tuple[int, Any]:
+    """Calls the backend and returns (status_code, json_body). status 0 means unreachable."""
+    method = method.upper()
+    endpoint = endpoint.lstrip("/")
 
-    url = f"{API_URL}/{endpoint.lstrip('/')}"
-    try:
-        timeout = (0.5, 30.0 if method.upper() == "POST" else 2.0)
-        if method.upper() == "GET":
-            resp = requests.get(url, timeout=timeout)
-        elif method.upper() == "POST":
-            resp = requests.post(url, json=json_data, timeout=timeout)
-        elif method.upper() == "DELETE":
-            resp = requests.delete(url, timeout=timeout)
-        elif method.upper() == "PATCH":
-            resp = requests.patch(url, json=json_data, timeout=timeout)
-        else:
-            raise ValueError(f"Unsupported method: {method}")
-
-        if resp.status_code in [200, 201]:
-            return resp.json()
-    except Exception:
+    if not is_backend_alive():
         if HAS_LOCAL_BACKEND:
-            return local_fallback_request(method, endpoint, json_data)
-    return None
+            return local_request(method, endpoint, json_data)
+        return 0, None
+
+    url = f"{API_URL}/{endpoint}"
+    timeout = (1.0, 60.0 if endpoint == "chat" else 5.0)
+    try:
+        resp = requests.request(method, url, json=json_data, timeout=timeout)
+        try:
+            body = resp.json()
+        except ValueError:
+            body = None
+        return resp.status_code, body
+    except requests.RequestException:
+        if HAS_LOCAL_BACKEND:
+            return local_request(method, endpoint, json_data)
+        return 0, None
 
 
-def local_fallback_request(method: str, endpoint: str, json_data=None):
-    """Direct in-process execution fallback."""
-    if endpoint == "threads" and method == "GET":
-        return [t.model_dump() for t in chat_manager.list_threads()]
-    if endpoint == "threads" and method == "POST":
-        title = (json_data or {}).get("title", "New Chat")
-        return chat_manager.create_thread(title).model_dump()
-    if endpoint.startswith("threads/") and method == "GET":
-        thread_id = endpoint.split("/")[-1]
-        t = chat_manager.get_thread(thread_id)
-        return t.model_dump() if t else None
-    if endpoint.startswith("threads/") and method == "DELETE":
-        thread_id = endpoint.split("/")[-1]
-        chat_manager.delete_thread(thread_id)
-        return {"status": "deleted"}
+def local_request(method: str, endpoint: str, json_data: Optional[dict] = None) -> Tuple[int, Any]:
+    """In-process equivalent of the REST API (same status codes as app/api/routes.py)."""
+    json_data = json_data or {}
+    parts = endpoint.split("/")
+
+    if endpoint == "health" and method == "GET":
+        return 200, {"status": "healthy", "mode": "in-process"}
+
+    if endpoint == "threads":
+        if method == "GET":
+            return 200, [t.model_dump() for t in chat_manager.list_threads()]
+        if method == "POST":
+            return 201, chat_manager.create_thread(json_data.get("title") or "New Chat").model_dump()
+
+    if len(parts) == 2 and parts[0] == "threads":
+        thread_id = parts[1]
+        if method == "GET":
+            t = chat_manager.get_thread(thread_id)
+            return (200, t.model_dump()) if t else (404, {"detail": "Thread not found."})
+        if method == "DELETE":
+            ok = chat_manager.delete_thread(thread_id)
+            return (200, {"status": "deleted", "thread_id": thread_id}) if ok else (404, {"detail": "Thread not found."})
+
     if endpoint == "chat" and method == "POST":
-        query = json_data.get("query", "")
+        query = (json_data.get("query") or "").strip()
+        if not query:
+            return 400, {"detail": "Query string cannot be empty."}
         thread_id = json_data.get("thread_id")
-        if not thread_id or not chat_manager.get_thread(thread_id):
-            t = chat_manager.create_thread("New Chat")
-            thread_id = t.thread_id
+        if thread_id:
+            thread = chat_manager.get_thread(thread_id)
+            if not thread:
+                return 404, {"detail": "Thread not found."}
+        else:
+            thread = chat_manager.create_thread("New Chat")
+            thread_id = thread.thread_id
 
         chat_manager.add_message(thread_id, "user", query)
-        rag_res = rag_pipeline.run(query)
-        ans_msg = chat_manager.add_message(
-            thread_id,
-            "assistant",
-            rag_res.get("response", ""),
-            source_url=rag_res.get("source_url"),
+        result = rag_pipeline.run(query)
+        answer = chat_manager.add_message(
+            thread_id, "assistant", result.response, source_url=result.source_url or None
         )
-        chat_manager.auto_title_thread(thread_id, query)
-        return {
+        if thread.title == "New Chat":
+            chat_manager.auto_title_thread(thread_id, query)
+        return 200, {
             "thread_id": thread_id,
-            "message_id": ans_msg.message_id,
-            "response": rag_res.get("response", ""),
-            "source_url": rag_res.get("source_url"),
-            "category": rag_res.get("category", "FACTUAL"),
-            "is_refusal": rag_res.get("is_refusal", False),
-            "created_at": ans_msg.created_at,
+            "message_id": answer.message_id,
+            "query": query,
+            "response": result.response,
+            "source_url": result.source_url or None,
+            "classification": result.category,
+            "category": result.category,
+            "is_refusal": result.is_refusal,
+            "created_at": answer.created_at,
         }
-    return None
+
+    return 404, {"detail": "Unknown endpoint."}
 
 
-# Verified Schemes in Corpus
-VERIFIED_SCHEMES = [
-    ("HDFC Mid-Cap Opportunities Fund", ["mid cap", "mid-cap", "opportunities"]),
-    ("HDFC Small Cap Fund", ["small cap", "smallcap"]),
-    ("HDFC Top 100 Large Cap Fund", ["top 100", "large cap", "largecap"]),
-    ("HDFC Silver ETF FoF", ["silver", "etf", "fof"]),
-    ("HDFC Multi-Cap Fund", ["multi cap", "multi-cap", "multicap"]),
-]
+# ==============================================================================
+# RENDERING HELPERS
+# ==============================================================================
+SOURCE_RE = re.compile(r"📎\s*Source:\s*(https?://\S+)")
+FOOTER_RE = re.compile(r"_?Last updated from sources:\s*([^_\n]+?)_?\s*$", re.MULTILINE)
 
-# Quick Starter Bento Queries
-QUICK_STARTER_QUERIES = [
-    {
-        "icon": "📊",
-        "tag": "EXPENSE & NAV",
-        "query": "What is the expense ratio and current NAV of HDFC Mid Cap Direct Plan Growth?",
-        "desc": "Expense & NAV Metrics",
-    },
-    {
-        "icon": "⏱️",
-        "tag": "REDEMPTION",
-        "query": "What is the exit load for HDFC Small Cap Fund if redeemed within 1 year?",
-        "desc": "Redemption Horizon Terms",
-    },
-    {
-        "icon": "💰",
-        "tag": "MINIMUM THRESHOLD",
-        "query": "What is the minimum SIP amount for HDFC Top 100 Large Cap Fund?",
-        "desc": "Statutory Minimum Threshold",
-    },
-]
 
-# Clean custom CSS overrides (Styling native elements only, NO raw HTML divs in flow)
+def split_assistant_message(content: str, stored_source: Optional[str]) -> Dict[str, Optional[str]]:
+    """Splits a formatted response (body / 📎 Source / footer) into its parts."""
+    text = content.strip()
+
+    source_url = stored_source
+    m = SOURCE_RE.search(text)
+    if m:
+        source_url = source_url or m.group(1)
+        text = text.replace(m.group(0), "")
+
+    footer = None
+    m = FOOTER_RE.search(text)
+    if m:
+        footer = f"Last updated from sources: {m.group(1).strip()}"
+        text = text[: m.start()] + text[m.end():]
+
+    return {"body": text.strip(), "source_url": source_url, "footer": footer}
+
+
+def md_safe(text: str) -> str:
+    """Prevents '$' amounts from being rendered as LaTeX by Streamlit markdown."""
+    return text.replace("$", r"\$")
+
+
+def render_assistant(content: str, source_url: Optional[str], is_refusal: Optional[bool] = None):
+    """Renders an assistant answer: body, clickable citation, italic footer. Refusals are highlighted."""
+    parts = split_assistant_message(content, source_url)
+    # Refusals never carry a citation (rag_pipeline sets source_url=None for every non-FACTUAL category)
+    if is_refusal is None:
+        is_refusal = not parts["source_url"]
+
+    if is_refusal:
+        st.warning(md_safe(parts["body"]), icon="🛡️")
+    else:
+        st.markdown(md_safe(parts["body"]))
+        if parts["source_url"]:
+            url = parts["source_url"]
+            st.markdown(f"📎 **Source:** [{url}]({url})")
+    if parts["footer"]:
+        st.markdown(f"*{parts['footer']}*")
+
+
+# ==============================================================================
+# STYLES — user bubbles right, assistant bubbles left
+# ==============================================================================
 st.markdown(
     """<style>
-@import url('https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap');
-
-/* Global Typography */
-html, body, [class*="css"], .stApp {
-    font-family: 'Inter', sans-serif !important;
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarUser"]) {
+    flex-direction: row-reverse;
+    text-align: right;
+    margin-left: 20%;
 }
-
-/* Primary Gradient Button */
-.stButton > button[kind="primary"] {
-    background: linear-gradient(90deg, #2563EB 0%, #1D4ED8 100%) !important;
-    color: #FFFFFF !important;
-    border: none !important;
-    font-weight: 600 !important;
-    box-shadow: 0 2px 8px rgba(37, 99, 235, 0.35) !important;
+[data-testid="stChatMessage"]:has([data-testid="stChatMessageAvatarAssistant"]) {
+    margin-right: 20%;
 }
-
-.stButton > button[kind="primary"]:hover {
-    background: linear-gradient(90deg, #3B82F6 0%, #2563EB 100%) !important;
-    box-shadow: 0 4px 14px rgba(37, 99, 235, 0.5) !important;
-}
-
-/* Bottom Input Container styling */
-[data-testid="stBottom"] {
-    background-color: rgba(11, 19, 38, 0.95) !important;
-    backdrop-filter: blur(12px) !important;
-    border-top: 1px solid rgba(255, 255, 255, 0.08) !important;
-}
-
-[data-testid="stChatInput"] {
-    background-color: #171F33 !important;
-    border: 1px solid rgba(255, 255, 255, 0.12) !important;
-    border-radius: 6px !important;
-}
-
-[data-testid="stChatInput"]:focus-within {
-    border-color: #2563EB !important;
-    box-shadow: 0 0 0 1px #2563EB, 0 0 14px rgba(37, 99, 235, 0.25) !important;
+.disclaimer-badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 999px;
+    border: 1px solid rgba(250, 202, 21, 0.6);
+    background: rgba(250, 202, 21, 0.12);
+    font-weight: 600;
+    font-size: 0.9rem;
 }
 </style>""",
     unsafe_allow_html=True,
 )
 
-# Session State Initialization
-if "current_thread_id" not in st.session_state:
-    st.session_state.current_thread_id = None
-if "pending_query" not in st.session_state:
-    st.session_state.pending_query = None
+# ==============================================================================
+# SESSION STATE
+# ==============================================================================
+st.session_state.setdefault("current_thread_id", None)
+st.session_state.setdefault("pending_query", None)
+st.session_state.setdefault("chat_error", None)
 
+# ==============================================================================
+# SIDEBAR — THREADS
+# ==============================================================================
+status_code, threads_body = api_request("GET", "threads")
+threads = threads_body if status_code == 200 and isinstance(threads_body, list) else []
+thread_ids = {t["thread_id"] for t in threads}
 
-def parse_assistant_message(content: str, default_source: Optional[str] = None) -> Dict[str, Any]:
-    """Extracts clean text, scheme name, and citation info from assistant messages."""
-    text = content.strip()
+# Drop a stale selection (e.g. thread deleted elsewhere)
+if st.session_state.current_thread_id and st.session_state.current_thread_id not in thread_ids:
+    st.session_state.current_thread_id = threads[0]["thread_id"] if threads else None
+# Default to the most recent thread on first load
+if st.session_state.current_thread_id is None and threads:
+    st.session_state.current_thread_id = threads[0]["thread_id"]
 
-    is_refusal = any(phrase in text.lower() for phrase in [
-        "cannot provide investment advice",
-        "i am a facts-only assistant",
-        "personal identifiers",
-        "out of scope",
-        "i do not accept",
-        "strictly non-advisory",
-        "sebi-registered financial advisor",
-        "recommendation",
-    ])
+with st.sidebar:
+    st.markdown(f'<span class="disclaimer-badge">⚠️ {DISCLAIMER}</span>', unsafe_allow_html=True)
+    st.markdown("### 📋 Threads")
 
-    source_url = default_source
-    src_match = re.search(r'\[Source:\s*([^\s\]]+)\]', text)
-    if src_match:
-        source_url = src_match.group(1)
-        text = text.replace(src_match.group(0), "")
-
-    src_link_match = re.search(r'(?:📎\s*)?Source:\s*(https?://[^\s\n\)]+)', text)
-    if src_link_match:
-        if not source_url:
-            source_url = src_link_match.group(1)
-        text = text.replace(src_link_match.group(0), "")
-
-    scrape_date = "Today"
-    date_match = re.search(r'\[Scraped:\s*([^\s\]]+)\]', text)
-    if date_match:
-        scrape_date = date_match.group(1)
-        text = text.replace(date_match.group(0), "")
-
-    date_note_match = re.search(r'_Last updated from sources:\s*([^\s_]+)_', text)
-    if date_note_match:
-        scrape_date = date_note_match.group(1)
-        text = text.replace(date_note_match.group(0), "")
-
-    clean_body = text.strip()
-
-    scheme_name = "HDFC Mutual Fund Scheme"
-    body_lower = clean_body.lower()
-    for full_name, kws in VERIFIED_SCHEMES:
-        if any(kw in body_lower for kw in kws):
-            scheme_name = full_name
-            break
-
-    return {
-        "clean_body": clean_body,
-        "source_url": source_url,
-        "scrape_date": scrape_date,
-        "is_refusal": is_refusal,
-        "scheme_name": scheme_name,
-    }
-
-
-def switch_thread(thread_id: str):
-    st.session_state.current_thread_id = thread_id
-    st.rerun()
-
-
-def create_new_thread():
-    res = api_request("POST", "threads", {"title": "New Chat"})
-    if res and "thread_id" in res:
-        st.session_state.current_thread_id = res["thread_id"]
+    if st.button("➕ New Chat", use_container_width=True, type="primary"):
+        current = next((t for t in threads if t["thread_id"] == st.session_state.current_thread_id), None)
+        # Reuse the current thread if it is still empty instead of piling up blank threads
+        if not (current and current.get("message_count", 0) == 0):
+            code, created = api_request("POST", "threads", {"title": "New Chat"})
+            if code == 201 and created:
+                st.session_state.current_thread_id = created["thread_id"]
+            else:
+                st.session_state.current_thread_id = None  # first message will auto-create a thread
         st.rerun()
 
+    st.divider()
 
-# ==============================================================================
-# SIDEBAR NAVIGATION RAIL
-# ==============================================================================
-with st.sidebar:
-    if st.button("➕ New Query", use_container_width=True, type="primary"):
-        create_new_thread()
+    if status_code == 0:
+        st.error("Backend unreachable. Start it with `uvicorn app.main:app --port 8000`.")
+    elif not threads:
+        st.caption("No conversations yet. Ask a question to start one.")
 
-    st.markdown("---")
-
-    threads_data = api_request("GET", "threads") or []
-    if not threads_data:
-        init_thread = api_request("POST", "threads", {"title": "New Chat"})
-        if init_thread:
-            st.session_state.current_thread_id = init_thread["thread_id"]
-            threads_data = [init_thread]
-
-    thread_ids = [t["thread_id"] for t in threads_data]
-    if st.session_state.current_thread_id not in thread_ids and thread_ids:
-        st.session_state.current_thread_id = thread_ids[0]
-
-    st.caption(f"💬 **CONVERSATIONS ({len(threads_data)} ACTIVE)**")
-
-    for t in threads_data[:12]:
+    for t in threads:
         t_id = t["thread_id"]
-        t_title = t.get("title", "New Chat")
-        is_active = (t_id == st.session_state.current_thread_id)
-
-        col1, col2 = st.columns([0.82, 0.18])
-        with col1:
-            icon_prefix = "🔷 " if is_active else "💬 "
-            btn_type = "primary" if is_active else "secondary"
-            if st.button(f"{icon_prefix}{t_title}", key=f"t_{t_id}", use_container_width=True, type=btn_type):
-                switch_thread(t_id)
-        with col2:
-            if st.button("🗑️", key=f"del_{t_id}", help="Delete chat thread", use_container_width=True):
+        is_active = t_id == st.session_state.current_thread_id
+        col_title, col_del = st.columns([0.8, 0.2])
+        with col_title:
+            label = f"{'● ' if is_active else '○ '}{t.get('title') or 'New Chat'}"
+            if st.button(label, key=f"t_{t_id}", use_container_width=True,
+                         type="primary" if is_active else "secondary"):
+                st.session_state.current_thread_id = t_id
+                st.rerun()
+        with col_del:
+            if st.button("🗑️", key=f"del_{t_id}", help="Delete this thread", use_container_width=True):
                 api_request("DELETE", f"threads/{t_id}")
-                if st.session_state.current_thread_id == t_id:
+                if is_active:
                     st.session_state.current_thread_id = None
                 st.rerun()
 
-    st.markdown("---")
-    st.caption("🏦 **Covered Schemes (5 Verified):**")
-    st.caption("• HDFC Mid-Cap Opportunities Fund\n• HDFC Small Cap Fund\n• HDFC Top 100 Large Cap Fund\n• HDFC Silver ETF FoF\n• HDFC Multi-Cap Fund")
-
-    with st.expander("⚖️ Statutory Disclosures", expanded=False):
-        st.caption(
-            "This assistant operates under strict facts-only retrieval guidelines. "
-            "No investment advice, projections, or comparisons are provided. "
-            "Non-SEBI registered entity. Reference: AMFI Ref 2024-CIR-92."
-        )
-
+    st.divider()
+    st.caption("🏦 **Covered schemes**")
+    st.caption("\n".join(f"• {s}" for s in COVERED_SCHEMES))
 
 # ==============================================================================
-# MAIN VIEW: TOP HEADER & MANDATORY REGULATORY BANNER (Native Streamlit)
+# HEADER
 # ==============================================================================
-col_h1, col_h2 = st.columns([0.75, 0.25])
-with col_h1:
-    st.markdown("### 🏦 HDFC Mutual Fund Facts-Only Assistant `v1.0 Facts-Only`")
-with col_h2:
-    st.caption("🟢 **Groq Engine Online** • ⚖️ *SEBI Non-Advisory Grounding*")
+col_title, col_badge = st.columns([0.68, 0.32])
+with col_title:
+    st.markdown("## 🏦 HDFC Mutual Fund FAQ Assistant")
+with col_badge:
+    st.markdown(f'<span class="disclaimer-badge">⚠️ {DISCLAIMER}</span>', unsafe_allow_html=True)
+st.divider()
 
-st.warning(
-    "⚠️ **MANDATORY REGULATORY DISCLAIMER:** Facts-only assistant. No investment advice, opinions, "
-    "or performance predictions provided. Non-SEBI registered entity. Strictly non-promotional. "
-    "*(AMFI Ref: 2024-CIR-92)*"
-)
-
-# Fetch messages for current active thread
-current_thread = None
+# ==============================================================================
+# CHAT AREA
+# ==============================================================================
 messages = []
 if st.session_state.current_thread_id:
-    current_thread = api_request("GET", f"threads/{st.session_state.current_thread_id}")
-    if current_thread:
-        messages = current_thread.get("messages", [])
+    code, thread = api_request("GET", f"threads/{st.session_state.current_thread_id}")
+    if code == 200 and thread:
+        messages = thread.get("messages") or []
 
+if st.session_state.chat_error:
+    st.error(st.session_state.chat_error)
+    st.session_state.chat_error = None
 
-# ==============================================================================
-# WELCOME HERO & QUICK STARTER BENTO GRID (When Thread Has No Messages)
-# ==============================================================================
-if not messages:
-    st.markdown("#### 🛡️ Verified Mutual Fund Facts at Your Fingertips")
-    st.caption(
-        "Strictly grounded in official Groww scheme data. Brevity guaranteed (≤ 3 sentences). "
-        "Zero personal opinion, recommendation, or return guarantees."
-    )
+if not messages and not st.session_state.pending_query:
+    # Welcome card
+    with st.container(border=True):
+        st.markdown("#### 👋 Welcome! I can answer factual questions about HDFC Mutual Fund schemes.")
+        st.markdown(
+            "Ask about expense ratio, exit load, minimum SIP, lock-in, riskometer, benchmark, "
+            "or how to download statements. Every answer is at most 3 sentences with one official source link."
+        )
+        st.warning(f"**{DISCLAIMER}** I can't recommend, compare or predict fund performance.", icon="⚠️")
+        st.markdown("**Try asking:**")
+        cols = st.columns(len(EXAMPLE_QUESTIONS))
+        for idx, (label, question) in enumerate(EXAMPLE_QUESTIONS):
+            with cols[idx]:
+                if st.button(f"{label}\n\n{question}", key=f"example_{idx}", use_container_width=True):
+                    st.session_state.pending_query = question
+                    st.rerun()
 
-    starter_cols = st.columns(3)
-    for idx, item in enumerate(QUICK_STARTER_QUERIES):
-        with starter_cols[idx]:
-            st.info(f"**{item['icon']} {item['tag']}**\n\n{item['query']}")
-            if st.button("Run Query ↗", key=f"bento_run_{idx}", use_container_width=True):
-                st.session_state.pending_query = item["query"]
-                st.rerun()
-
-    st.markdown("---")
-    st.caption("📊 **Verified Dataset Comparison Snapshot (Source: Groww APIs)**")
-    snap_cols = st.columns(4)
-    with snap_cols[0]:
-        st.markdown("**HDFC Small Cap**\n\n`TER: 0.69%` • **NAV ₹142.10**\n\nMin SIP: ₹100 • Lock-in: None")
-    with snap_cols[1]:
-        st.markdown("**HDFC Top 100**\n\n`TER: 1.05%` • **NAV ₹1,085.4**\n\nMin SIP: ₹100 • Exit Load: 1% (<1Y)")
-    with snap_cols[2]:
-        st.markdown("**HDFC Silver ETF**\n\n`TER: 0.35%` • **NAV ₹16.42**\n\nCommodity Backed • 99.9% Purity")
-    with snap_cols[3]:
-        st.markdown("**HDFC Multi-Cap**\n\n`TER: 0.81%` • **NAV ₹21.80**\n\nLarge: 25% | Mid: 25% | Small: 25%")
-
-
-# ==============================================================================
-# CHAT HISTORY RENDERING (Native Streamlit Chat Messages - 100% Code-Leak Proof)
-# ==============================================================================
 for msg in messages:
-    role = msg.get("role", "user")
-    content = msg.get("content", "")
-    created_at = msg.get("created_at", "")
-    source_url = msg.get("source_url")
-
-    if role == "user":
+    if msg.get("role") == "user":
         with st.chat_message("user"):
-            st.markdown(content)
+            st.markdown(md_safe(msg.get("content", "")))
     else:
         with st.chat_message("assistant"):
-            parsed = parse_assistant_message(content, default_source=source_url)
-            clean_body = parsed["clean_body"]
-            resolved_source = parsed["source_url"]
-            is_refusal = parsed["is_refusal"]
-
-            if is_refusal:
-                st.warning(clean_body)
-                st.caption("🛡️ *SEBI Non-Advisory Grounding: Automated recommendations and forecasts are strictly prohibited.*")
-            else:
-                st.markdown(f"**✓ VERIFIED FACTUAL** • `{parsed['scheme_name']}`")
-                st.markdown(clean_body)
-                if resolved_source:
-                    st.caption(f"🔗 **Source:** [{resolved_source}]({resolved_source}) *(Fetched & Verified)*")
-
+            render_assistant(msg.get("content", ""), msg.get("source_url"))
 
 # ==============================================================================
-# PROMPT INPUT DOCK & QUERY EXECUTION
+# INPUT & SEND
 # ==============================================================================
-user_input = st.chat_input("Ask a scheme fact (TER, NAV, SIP limits, AUM, exit loads)...")
+user_input = st.chat_input("Type your question...")
 
-query_to_send = None
+query = None
 if st.session_state.pending_query:
-    query_to_send = st.session_state.pending_query
+    query = st.session_state.pending_query
     st.session_state.pending_query = None
-elif user_input:
-    query_to_send = user_input.strip()
+elif user_input and user_input.strip():
+    query = user_input.strip()
 
-if query_to_send:
+if query:
     with st.chat_message("user"):
-        st.markdown(query_to_send)
+        st.markdown(md_safe(query))
 
     with st.chat_message("assistant"):
-        with st.spinner("Retrieving verified facts & generating response..."):
-            payload = {
-                "query": query_to_send,
-                "thread_id": st.session_state.current_thread_id,
-            }
-            res = api_request("POST", "chat", payload)
+        with st.spinner("Retrieving verified facts..."):
+            payload = {"query": query, "thread_id": st.session_state.current_thread_id}
+            code, res = api_request("POST", "chat", payload)
+            if code == 404:
+                # Active thread vanished; start a new one with this question
+                payload["thread_id"] = None
+                code, res = api_request("POST", "chat", payload)
 
-            if res and "response" in res:
-                response_text = res["response"]
-                source_url = res.get("source_url")
-                if "thread_id" in res:
-                    st.session_state.current_thread_id = res["thread_id"]
-                st.markdown(response_text)
-            else:
-                st.error("Failed to generate response. Please verify backend service.")
-
-    st.rerun()
-
-# Telemetry footer
-st.caption("🟢 **Groq LPU 120B** • Latency: ~140ms • Facts-Only Guardrail ON • *Data cross-referenced with SEBI filings & Groww data feeds.*")
+        if code == 200 and res and "response" in res:
+            st.session_state.current_thread_id = res["thread_id"]
+            st.rerun()  # re-render from persisted history (updates sidebar titles too)
+        else:
+            detail = (res or {}).get("detail") if isinstance(res, dict) else None
+            st.session_state.chat_error = (
+                f"Could not get a response ({detail or 'backend unavailable'}). Please try again."
+            )
+            st.rerun()

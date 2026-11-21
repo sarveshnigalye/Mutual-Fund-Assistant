@@ -137,3 +137,36 @@ def test_thread_error_handling_404s():
     assert res_del.status_code == 404
 
 
+def test_chat_endpoint_invalid_thread_id_returns_404():
+    res = client.post(
+        "/api/chat",
+        json={"query": "What is the exit load for HDFC Small Cap Fund?", "thread_id": "non-existent-uuid-9999"},
+    )
+    assert res.status_code == 404
+    # No orphan thread should have been created for the unknown ID
+    assert all(t["thread_id"] != "non-existent-uuid-9999" for t in client.get("/api/threads").json())
+
+
+def test_chat_endpoint_missing_query_returns_422():
+    res = client.post("/api/chat", json={})
+    assert res.status_code == 422
+
+
+def test_rename_thread_blank_title_rejected():
+    thread_id = client.post("/api/threads", json={"title": "Keep Me"}).json()["thread_id"]
+    res = client.patch(f"/api/threads/{thread_id}", json={"title": "   "})
+    assert res.status_code == 422
+    assert client.get(f"/api/threads/{thread_id}").json()["title"] == "Keep Me"
+    client.delete(f"/api/threads/{thread_id}")
+
+
+def test_chat_response_schema_matches_architecture():
+    query = "Should I invest in HDFC Mid Cap Fund?"
+    data = client.post("/api/chat", json={"query": query}).json()
+    for key in ("thread_id", "message_id", "query", "response", "classification", "source_url", "is_refusal"):
+        assert key in data, f"missing '{key}' in /api/chat response"
+    assert data["query"] == query
+    assert data["classification"] == "ADVISORY"
+    assert data["source_url"] is None
+
+

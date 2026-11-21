@@ -38,20 +38,31 @@ PII_PATTERNS = {
 }
 
 
+# Fully spaced PAN, e.g. "A B C D E 1 2 3 4 F" (uppercase, every character separated)
+_PAN_FULLY_SPACED = re.compile(
+    r"(?<![A-Za-z0-9])[A-Z](?:[\s.\-]+[A-Z]){4}(?:[\s.\-]+\d){4}[\s.\-]+[A-Z](?![A-Za-z0-9])"
+)
+# Partially separated PAN, e.g. "ABCDE 1234 F" / "abcde-1234-f" — only flagged alongside a PAN keyword
+_PAN_LOOSE = re.compile(
+    r"(?<![A-Za-z0-9])[A-Z](?:[\s.\-]?[A-Z]){4}[\s.\-]?\d(?:[\s.\-]?\d){3}[\s.\-]?[A-Z](?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+# "pan", "PAN", "P A N", "P-A-N" as a standalone word (not inside "company", "expand", ...)
+_PAN_KEYWORD = re.compile(r"(?<![A-Za-z])p[\s.\-]*a[\s.\-]*n(?![A-Za-z])", re.IGNORECASE)
+
+
 def check_spaced_pan(text: str) -> bool:
     """
     Detects deliberately or accidentally spaced PAN patterns like 'P A N : A B C D E 1 2 3 4 F'
     or 'A B C D E 1 2 3 4 F'.
+
+    The previous implementation stripped all whitespace and searched for 'pan' anywhere, which
+    flagged ordinary questions (e.g. "exit load since 2024 according to the company" ->
+    'since2024a' + 'com-pan-y'). Separators are now bounded and the keyword must be a word.
     """
-    # Remove all whitespace, hyphens, and dots
-    condensed = re.sub(r"[\s\.\-]", "", text)
-    # Check for 5 uppercase letters, 4 digits, 1 uppercase letter
-    if re.search(r"(?:PAN:?)?[A-Z]{5}\d{4}[A-Z]", condensed, re.IGNORECASE):
-        # Verify it wasn't just a false positive from normal sentences by requiring
-        # either 'pan' keyword or distinct letter/digit transition pattern
-        if "pan" in condensed.lower() or re.search(r"\b(?:[A-Z]\s+){4}[A-Z]\s+(?:\d\s+){3}\d\s+[A-Z]\b", text, re.IGNORECASE):
-            return True
-    return False
+    if _PAN_FULLY_SPACED.search(text):
+        return True
+    return bool(_PAN_KEYWORD.search(text) and _PAN_LOOSE.search(text))
 
 
 def scan_pii(text: str) -> Tuple[bool, Optional[str]]:
