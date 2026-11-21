@@ -35,6 +35,7 @@ data/*.old-*/
 *.log
 
 # IDE & OS
+node_modules/
 .claude/
 .vscode/
 .idea/
