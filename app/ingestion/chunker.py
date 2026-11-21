@@ -1,8 +1,17 @@
 """Document chunking module for mutual fund corpus."""
 
+import hashlib
 import re
 from typing import Any, Dict, List
 from app.ingestion.scraper import ScrapedDocument
+
+
+def make_chunk_id(source_url: str, section_heading: str, chunk_index: int) -> str:
+    """Deterministic chunk ID (edge-cases.md §7.10): re-ingesting the same page upserts, never duplicates.
+
+    `chunk_index` counts within the section, so a change in one section leaves other sections' IDs alone.
+    """
+    return hashlib.sha1(f"{source_url}|{section_heading}|{chunk_index}".encode("utf-8")).hexdigest()
 
 
 class DocumentChunk:
@@ -19,6 +28,7 @@ class DocumentChunk:
         section_heading: str,
         scrape_date: str,
         text: str,
+        run_id: str = "",
     ):
         self.chunk_id = chunk_id
         self.scheme_id = scheme_id
@@ -29,6 +39,7 @@ class DocumentChunk:
         self.section_heading = section_heading
         self.scrape_date = scrape_date
         self.text = text
+        self.run_id = run_id
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -41,15 +52,17 @@ class DocumentChunk:
             "section_heading": self.section_heading,
             "scrape_date": self.scrape_date,
             "text": self.text,
+            "run_id": self.run_id,
         }
 
 
 class DocumentChunker:
     """Chunks scraped scheme documents using recursive character splitting with metadata preservation."""
 
-    def __init__(self, chunk_size: int = 700, chunk_overlap: int = 120):
+    def __init__(self, chunk_size: int = 700, chunk_overlap: int = 120, run_id: str = ""):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
+        self.run_id = run_id
 
     def _split_text(self, text: str) -> List[str]:
         """
@@ -107,7 +120,6 @@ class DocumentChunker:
     def chunk_document(self, doc: ScrapedDocument) -> List[DocumentChunk]:
         """Splits a single ScrapedDocument into DocumentChunk instances with metadata."""
         chunks: List[DocumentChunk] = []
-        chunk_idx = 0
 
         # Chunk each section individually to keep heading context
         for sec in doc.sections:
@@ -115,11 +127,11 @@ class DocumentChunker:
             section_text = sec["text"]
 
             sub_chunks = self._split_text(section_text)
-            for sub_text in sub_chunks:
+            for chunk_idx, sub_text in enumerate(sub_chunks):
                 # Prepend scheme and section context for high retrieval precision
                 contextualized_text = f"[{doc.scheme_name} - {section_name}]\n{sub_text}"
 
-                chunk_id = f"{doc.scheme_id}-chunk-{chunk_idx:03d}"
+                chunk_id = make_chunk_id(doc.url, section_name, chunk_idx)
                 chunk = DocumentChunk(
                     chunk_id=chunk_id,
                     scheme_id=doc.scheme_id,
@@ -130,9 +142,9 @@ class DocumentChunker:
                     section_heading=section_name,
                     scrape_date=doc.scrape_date,
                     text=contextualized_text,
+                    run_id=self.run_id,
                 )
                 chunks.append(chunk)
-                chunk_idx += 1
 
         return chunks
 

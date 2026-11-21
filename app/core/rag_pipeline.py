@@ -7,9 +7,9 @@ from pydantic import BaseModel, Field
 
 from app.core.classifier import REFUSAL_TEMPLATES, QueryCategory, query_classifier
 from app.core.formatter import (
-    DEFAULT_SCRAPE_DATE,
     FALLBACK_SOURCE_URL,
     FALLBACK_TEXT,
+    default_scrape_date,
     format_response,
 )
 from app.core.generator import LLMGenerator
@@ -95,12 +95,13 @@ class RAGPipeline:
 
     @staticmethod
     def _fallback(query: str, text: str, raw: str, chunks=None, truncated: bool = False) -> FormattedResponse:
+        scrape_date = default_scrape_date()
         return FormattedResponse(
             query=query,
-            response=format_response(text, source_url=FALLBACK_SOURCE_URL, scrape_date=DEFAULT_SCRAPE_DATE),
+            response=format_response(text, source_url=FALLBACK_SOURCE_URL, scrape_date=scrape_date),
             raw_response=raw,
             source_url=FALLBACK_SOURCE_URL,
-            scrape_date=DEFAULT_SCRAPE_DATE,
+            scrape_date=scrape_date,
             category=QueryCategory.FACTUAL.value,
             is_refusal=False,
             truncated=truncated,
@@ -151,7 +152,7 @@ class RAGPipeline:
 
         top_chunk = chunks[0]
         source_url = top_chunk.get("source_url") or FALLBACK_SOURCE_URL
-        scrape_date = top_chunk.get("scrape_date") or DEFAULT_SCRAPE_DATE
+        scrape_date = top_chunk.get("scrape_date") or default_scrape_date()
 
         # 4. Generate raw response via LLM
         raw_response = self.generator.generate(query=clean_query, chunks=chunks)

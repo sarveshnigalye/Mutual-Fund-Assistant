@@ -1,5 +1,7 @@
 """End-to-end edge-case test matrix verification according to Docs/edge-cases.md."""
 
+import re
+
 import pytest
 from app.core.classifier import QueryCategory, query_classifier
 from app.core.formatter import split_sentences
@@ -36,7 +38,8 @@ def test_t09_factual_accuracy_and_format_constraints():
     response_text = res["response"]
     assert "0.60%" in response_text or "expense ratio" in response_text.lower()
     assert "📎 Source: https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth" in response_text
-    assert "_Last updated from sources: 2026-10-25_" in response_text
+    # the date is whatever the latest data refresh scraped (Phase 7), not a fixed day
+    assert re.search(r"_Last updated from sources: \d{4}-\d{2}-\d{2}_", response_text)
 
     # Verify sentence count constraint <= 3
     body = response_text.split("📎 Source:")[0].strip()

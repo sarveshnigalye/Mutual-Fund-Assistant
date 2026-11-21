@@ -6,6 +6,7 @@ import re
 from typing import Optional
 
 from app.core.safety import contains_pii
+from app.ingestion.snapshot import current_scrape_date
 
 # Load refusal templates for fallback/PII leak safety
 REFUSAL_FILE = os.path.join(os.path.dirname(__file__), "..", "prompts", "refusal_templates.json")
@@ -22,7 +23,11 @@ FALLBACK_TEXT = REFUSAL_TEMPLATES.get(
     "FALLBACK", "I don't have verified information on this. Please check the official HDFC AMC website."
 )
 FALLBACK_SOURCE_URL = "https://www.hdfcfund.com"
-DEFAULT_SCRAPE_DATE = "2026-10-25"
+
+
+def default_scrape_date() -> str:
+    """Footer date when a chunk has none: `scrape_date` of the live snapshot (data/metadata.json)."""
+    return current_scrape_date()
 
 
 def clean_llm_output(raw_text: str) -> str:
@@ -157,7 +162,7 @@ def format_response(
     citation = (source_url or "").strip() or FALLBACK_SOURCE_URL
     parts.append(f"📎 Source: {citation}")
 
-    date_str = scrape_date or DEFAULT_SCRAPE_DATE
+    date_str = scrape_date or default_scrape_date()
     parts.append(f"_Last updated from sources: {date_str}_")
 
     return "\n\n".join(parts)

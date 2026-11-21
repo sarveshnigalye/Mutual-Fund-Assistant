@@ -97,7 +97,7 @@ def sync_embeddings_to_chroma() -> bool:
             "category": chunk["category"],
             "source_url": chunk["source_url"],
             "section_heading": chunk["section_heading"],
-            "scrape_date": chunk.get("scrape_date", "2026-10-25"),
+            "scrape_date": chunk.get("scrape_date", ""),
         }, ensure_ascii=False)
 
         records.append((chunk["chunk_id"], collection_id, vec_blob, chunk["text"], meta_json))

@@ -3,10 +3,14 @@
 import logging
 import os
 import re
+import threading
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from app.config import settings
+from app.ingestion.chroma_store import clear_client_cache
 from app.ingestion.indexer import VectorIndexer
+from app.ingestion.snapshot import snapshot_version
 
 logger = logging.getLogger("core.retriever")
 
@@ -78,18 +82,77 @@ def detect_external_amc(query: str) -> Optional[str]:
 
 
 class MutualFundRetriever:
-    """Retriever wrapping the VectorIndexer with scheme-awareness and filtering."""
+    """Retriever wrapping the VectorIndexer with scheme-awareness and filtering.
 
-    def __init__(self, vectorstore_dir: Optional[str] = None):
+    Hot reload (Phase 7.9): once loaded, it checks the snapshot metadata file at most every
+    `reload_check_seconds` and, when `generated_at` changes, loads the new index into a fresh
+    VectorIndexer and swaps it in. If the new index cannot be loaded, the old one keeps serving.
+    """
+
+    def __init__(
+        self,
+        vectorstore_dir: Optional[str] = None,
+        metadata_path: Optional[str] = None,
+        reload_check_seconds: Optional[float] = None,
+    ):
         self.vectorstore_dir = vectorstore_dir or settings.vectorstore_path
+        self.metadata_path = metadata_path or settings.data_metadata_path
+        self.reload_check_seconds = (
+            settings.index_reload_check_seconds if reload_check_seconds is None else reload_check_seconds
+        )
         self.indexer = VectorIndexer(vectorstore_dir=self.vectorstore_dir)
         self._is_loaded = False
+        self._snapshot_version: Optional[str] = None
+        self._last_check = 0.0
+        self._lock = threading.Lock()
+
+    @property
+    def snapshot_version(self) -> Optional[str]:
+        return self._snapshot_version
 
     def load(self) -> bool:
-        """Loads vector index into memory."""
+        """Loads vector index into memory (and picks up a newer snapshot if one was published)."""
         if not self._is_loaded:
-            self._is_loaded = self.indexer.load()
-        return self._is_loaded
+            with self._lock:
+                if not self._is_loaded:
+                    version = snapshot_version(self.metadata_path)  # read before loading: never skip a newer one
+                    self._is_loaded = self.indexer.load()
+                    if self._is_loaded:
+                        self._snapshot_version = version
+                        self._last_check = time.monotonic()
+            return self._is_loaded
+        self._maybe_reload()
+        return True
+
+    def _maybe_reload(self) -> bool:
+        now = time.monotonic()
+        if now - self._last_check < self.reload_check_seconds:
+            return False
+        if not self._lock.acquire(blocking=False):
+            return False  # another request is already checking / reloading
+        try:
+            self._last_check = now
+            version = snapshot_version(self.metadata_path)
+            if not version or version == self._snapshot_version:
+                return False
+            return self.reload(version)
+        finally:
+            self._lock.release()
+
+    def reload(self, version: Optional[str] = None) -> bool:
+        """Loads the index from disk into a fresh indexer and swaps it in on success."""
+        version = version or snapshot_version(self.metadata_path)
+        if settings.vector_db_provider == "chromadb":
+            clear_client_cache()  # the chroma directory may have been replaced underneath us
+        fresh = VectorIndexer(vectorstore_dir=self.vectorstore_dir)
+        if not fresh.load():
+            logger.warning(f"Snapshot {version} could not be loaded; still serving {self._snapshot_version}.")
+            return False
+        self.indexer = fresh
+        previous, self._snapshot_version = self._snapshot_version, version
+        self._is_loaded = True
+        logger.info(f"Reloaded vector index: snapshot {previous} -> {version} ({len(fresh.chunks)} chunks).")
+        return True
 
     def retrieve(
         self,
@@ -104,6 +167,7 @@ class MutualFundRetriever:
         if not self.load():
             logger.error("Failed to load vector index.")
             return []
+        indexer = self.indexer  # one snapshot for the whole request, even if a reload swaps it
 
         k = top_k or settings.retrieval_top_k
         effective_threshold = (
@@ -124,7 +188,7 @@ class MutualFundRetriever:
         # First attempt: search with scheme filter if detected
         results = []
         if detected_scheme:
-            results = self.indexer.search(
+            results = indexer.search(
                 query=query,
                 top_k=k + 3,
                 scheme_filter=detected_scheme,
@@ -133,7 +197,7 @@ class MutualFundRetriever:
 
         # If no or too few results with filter, search globally
         if len(results) < 2:
-            global_results = self.indexer.search(
+            global_results = indexer.search(
                 query=query,
                 top_k=k + 3,
                 scheme_filter=None,
@@ -158,7 +222,7 @@ class MutualFundRetriever:
         # For detected scheme, ensure its primary Key Facts chunk is included in top results
         if detected_scheme:
             key_facts_chunks = [
-                c for c in self.indexer.chunks
+                c for c in indexer.chunks
                 if c.get("scheme_id") == detected_scheme and "Key Facts" in c.get("section_heading", "")
             ]
             if key_facts_chunks:

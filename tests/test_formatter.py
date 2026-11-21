@@ -84,8 +84,11 @@ def test_formatter_strips_llm_urls_and_disclaimers():
 
 
 def test_formatter_missing_scrape_date_defaults():
+    from app.ingestion.snapshot import current_scrape_date
+
     formatted = format_response("The benchmark is NIFTY 100 TRI.", "https://groww.in/x", scrape_date=None)
-    assert "_Last updated from sources: 2026-10-25_" in formatted
+    # falls back to the live snapshot's scrape date (data/metadata.json), refreshed daily in Phase 7
+    assert f"_Last updated from sources: {current_scrape_date()}_" in formatted
     assert "None" not in formatted
 
 

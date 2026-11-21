@@ -20,6 +20,13 @@ data/vectorstore/
 data/chroma/
 data/chat.db
 data/raw/
+# Phase 7 staging build & sync temp dirs (published to the data-snapshot branch, never to main)
+data/vectorstore_staging/
+data/chroma_staging/
+data/metadata_staging.json
+data/validation_staging.json
+data/.sync-*/
+data/*.old-*/
 
 # Testing & logs
 .pytest_cache/

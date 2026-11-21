@@ -3,6 +3,7 @@
 import json
 import logging
 import os
+import time
 from typing import Any, Dict, List, Optional
 import numpy as np
 from sklearn.metrics.pairwise import cosine_similarity
@@ -22,7 +23,12 @@ class VectorIndexer:
     Supports Pinecone (cloud), ChromaDB (embedded), and local serialized hybrid store.
     """
 
-    def __init__(self, vectorstore_dir: str = "data/vectorstore"):
+    def __init__(
+        self,
+        vectorstore_dir: str = "data/vectorstore",
+        chroma_path: Optional[str] = None,
+        chroma_collection: Optional[str] = None,
+    ):
         self.vectorstore_dir = vectorstore_dir
         os.makedirs(self.vectorstore_dir, exist_ok=True)
 
@@ -38,13 +44,24 @@ class VectorIndexer:
             PineconeVectorStore() if self.provider == "pinecone" else None
         )
         self.chroma_store = (
-            ChromaVectorStore() if self.provider == "chromadb" else None
+            ChromaVectorStore(persist_directory=chroma_path, collection_name=chroma_collection)
+            if self.provider == "chromadb"
+            else None
         )
 
-    def index_chunks(self, chunk_objects: List[DocumentChunk]) -> Dict[str, Any]:
+    def index_chunks(
+        self,
+        chunk_objects: List[DocumentChunk],
+        extra_metadata: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
         """
         Indexes chunks into persistent storage and builds vector representations.
+        `extra_metadata` (run_id, page hashes, timings, ...) is merged into the returned catalog.
         """
+        ids = [c.chunk_id for c in chunk_objects]
+        if len(ids) != len(set(ids)):
+            dupes = sorted({i for i in ids if ids.count(i) > 1})
+            raise ValueError(f"Duplicate chunk IDs would be indexed: {dupes[:5]}")
         logger.info(f"Indexing {len(chunk_objects)} chunks...")
 
         # 1. Save corpus chunks to JSON
@@ -52,13 +69,20 @@ class VectorIndexer:
         with open(self.corpus_path, "w", encoding="utf-8") as f:
             json.dump(self.chunks, f, indent=2, ensure_ascii=False)
 
-        # 2. Fit TF-IDF & BM25 models
+        # 2. Fit TF-IDF & BM25 models ("embed" stage)
+        t_embed = time.perf_counter()
         fit_results = self.embedder.fit_and_encode(chunk_objects)
+        embed_seconds = time.perf_counter() - t_embed
+        t_store = time.perf_counter()
 
         # 3. Create metadata catalog
-        schemes = list({c.scheme_name for c in chunk_objects})
-        urls = list({c.source_url for c in chunk_objects})
+        # Sorted so identical corpora produce identical metadata
+        schemes = sorted({c.scheme_name for c in chunk_objects})
+        urls = sorted({c.source_url for c in chunk_objects})
         scrape_date = chunk_objects[0].scrape_date if chunk_objects else ""
+        chunks_per_scheme: Dict[str, int] = {}
+        for c in chunk_objects:
+            chunks_per_scheme[c.scheme_id] = chunks_per_scheme.get(c.scheme_id, 0) + 1
 
         catalog = {
             "total_chunks": len(chunk_objects),
@@ -67,11 +91,10 @@ class VectorIndexer:
             "source_urls": urls,
             "scrape_date": scrape_date,
             "embedding_type": "tfidf_bm25_hybrid",
-            "corpus_path": self.corpus_path,
+            "corpus_path": self.corpus_path.replace(os.sep, "/"),
+            "chunks_per_scheme": dict(sorted(chunks_per_scheme.items())),
+            "vocab_size": fit_results.get("vocab_size"),
         }
-
-        with open(self.metadata_path, "w", encoding="utf-8") as f:
-            json.dump(catalog, f, indent=2, ensure_ascii=False)
 
         # 4. Optional cloud / embedded database sync (Pinecone / ChromaDB)
         if self.pinecone_store and self.pinecone_store.is_ready():
@@ -80,7 +103,22 @@ class VectorIndexer:
 
         if self.chroma_store and self.chroma_store.is_ready():
             dense_vectors = self.embedder.tfidf_matrix.toarray().tolist()
-            self.chroma_store.upsert_chunks(self.chunks, dense_vectors)
+            sync = self.chroma_store.sync_chunks(self.chunks, dense_vectors)
+            catalog["chroma"] = {
+                "path": str(self.chroma_store.persist_directory).replace(os.sep, "/"),
+                "collection": self.chroma_store.collection_name,
+                "count": self.chroma_store.count(),
+                **sync,
+            }
+
+        catalog["timings"] = {
+            "embed_seconds": round(embed_seconds, 3),
+            "store_seconds": round(time.perf_counter() - t_store, 3),
+        }
+        if extra_metadata:
+            catalog.update(extra_metadata)
+        with open(self.metadata_path, "w", encoding="utf-8") as f:
+            json.dump(catalog, f, indent=2, ensure_ascii=False)
 
         logger.info(f"Indexing complete. {len(chunk_objects)} chunks indexed across {len(schemes)} schemes.")
         return catalog

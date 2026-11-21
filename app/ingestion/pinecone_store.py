@@ -14,6 +14,7 @@ except ImportError:
     PINECONE_AVAILABLE = False
 
 from app.config import settings
+from app.ingestion.snapshot import current_scrape_date
 
 logger = logging.getLogger("ingestion.pinecone_store")
 
@@ -85,7 +86,7 @@ class PineconeVectorStore:
                 "category": str(chunk.get("category", "")),
                 "source_url": str(chunk.get("source_url", "")),
                 "section_heading": str(chunk.get("section_heading", "")),
-                "scrape_date": str(chunk.get("scrape_date", "2026-10-25")),
+                "scrape_date": str(chunk.get("scrape_date") or current_scrape_date()),
                 "text": str(chunk.get("text", ""))[:1000],  # Pinecone metadata size limit
             }
             vectors_to_upsert.append({
@@ -143,7 +144,7 @@ class PineconeVectorStore:
                     "category": meta.get("category", ""),
                     "source_url": meta.get("source_url", ""),
                     "section_heading": meta.get("section_heading", ""),
-                    "scrape_date": meta.get("scrape_date", "2026-10-25"),
+                    "scrape_date": meta.get("scrape_date") or current_scrape_date(),
                     "text": meta.get("text", ""),
                     "similarity_score": score,
                     "cosine_score": score,

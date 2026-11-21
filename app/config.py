@@ -31,6 +31,10 @@ class Settings(BaseSettings):
     pinecone_environment: Optional[str] = Field(default="us-east-1", validation_alias="PINECONE_ENVIRONMENT")
     chroma_db_path: str = Field(default="./data/chroma", validation_alias="CHROMA_DB_PATH")
 
+    # Snapshot metadata (Phase 7): written by ingestion, watched by the retriever for hot reload
+    data_metadata_path: str = Field(default="./data/metadata.json", validation_alias="DATA_METADATA_PATH")
+    index_reload_check_seconds: int = Field(default=60, validation_alias="INDEX_RELOAD_CHECK_SECONDS")
+
     # Retrieval
     retrieval_top_k: int = Field(default=5, validation_alias="RETRIEVAL_TOP_K")
     retrieval_similarity_threshold: float = Field(default=0.35, validation_alias="RETRIEVAL_SIMILARITY_THRESHOLD")

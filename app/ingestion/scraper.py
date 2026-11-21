@@ -1,19 +1,84 @@
-"""Web scraper for Groww mutual fund scheme pages using Selenium."""
+"""Web scraper for Groww mutual fund scheme pages using Selenium.
 
+Phase 7: pages are always fetched live. `data/raw/*.html` is written as an audit copy of
+what was indexed and is never read back as a cache, so a failed fetch fails that URL
+instead of silently re-indexing stale HTML. CAPTCHA / bot-block pages are rejected.
+"""
+
+import hashlib
 import json
 import logging
 import os
 import re
 import time
-from datetime import datetime
 from typing import Any, Dict, List, Optional
 from bs4 import BeautifulSoup
 from selenium import webdriver
 
 from app.config import settings
+from app.ingestion.snapshot import ist_today
 
 logger = logging.getLogger("ingestion.scraper")
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+
+USER_AGENTS = {
+    "edge": (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
+    ),
+    # Headless Chrome otherwise advertises "HeadlessChrome", which bot filters block on sight.
+    "chrome": (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    ),
+}
+
+# Phrases that only appear on anti-bot / error interstitials. None of them occur in the
+# visible text of a genuine Groww scheme page (checked against the 2026-10-25 audit copies).
+BLOCK_MARKERS = (
+    "captcha",
+    "are you a robot",
+    "are you human",
+    "verify you are human",
+    "unusual traffic",
+    "access denied",
+    "request blocked",
+    "attention required",
+    "too many requests",
+    "checking your browser",
+    "just a moment...",
+    "enable javascript and cookies",
+    "403 forbidden",
+)
+
+# Text the page shows once fund data has rendered (edge-cases.md §7.4 explicit wait).
+READY_MARKER = "expense ratio"
+PAGE_READY_TIMEOUT_SECONDS = 20
+
+
+class BlockedPageError(RuntimeError):
+    """The fetched page is a CAPTCHA / bot-block / error page, not fund data."""
+
+
+def visible_text(html: str) -> str:
+    """Text a user would see: scripts, styles and noscript blocks removed, whitespace collapsed."""
+    soup = BeautifulSoup(html or "", "html.parser")
+    for element in soup(["script", "style", "noscript", "template"]):
+        element.decompose()
+    return re.sub(r"\s+", " ", soup.get_text(separator=" ")).strip()
+
+
+def detect_block_page(html: str) -> Optional[str]:
+    """Returns the matched marker if `html` is a CAPTCHA / bot-block page, else None."""
+    text = visible_text(html).lower()
+    for marker in BLOCK_MARKERS:
+        if marker in text:
+            return marker
+    return None
+
+
+def sha256_text(text: str) -> str:
+    return hashlib.sha256((text or "").encode("utf-8")).hexdigest()
 
 
 class ScrapedDocument:
@@ -29,6 +94,7 @@ class ScrapedDocument:
         scrape_date: str,
         full_text: str,
         sections: List[Dict[str, str]],
+        page_sha256: str = "",
     ):
         self.scheme_id = scheme_id
         self.scheme_name = scheme_name
@@ -38,6 +104,8 @@ class ScrapedDocument:
         self.scrape_date = scrape_date
         self.full_text = full_text
         self.sections = sections
+        # sha256 of the page's visible text as fetched (before parsing), for the run metadata
+        self.page_sha256 = page_sha256
 
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -49,6 +117,7 @@ class ScrapedDocument:
             "scrape_date": self.scrape_date,
             "full_text": self.full_text,
             "sections": self.sections,
+            "page_sha256": self.page_sha256,
         }
 
 
@@ -56,12 +125,15 @@ class GrowwScraper:
     """Automates headless browser scraping of Groww mutual fund scheme pages."""
 
     def __init__(self, raw_cache_dir: str = "data/raw"):
+        # Audit copies only — never read back (Phase 7.2).
         self.raw_cache_dir = raw_cache_dir
         os.makedirs(self.raw_cache_dir, exist_ok=True)
+        self.failures: List[Dict[str, str]] = []
 
     def _create_driver(self) -> webdriver.Remote:
         """Instantiates a headless Chromium or Edge driver based on configuration."""
         browser_type = settings.browser_type.lower()
+        driver_path = (settings.chrome_driver_path or "auto").strip()
 
         if browser_type == "edge":
             from selenium.webdriver.edge.options import Options as EdgeOptions
@@ -74,15 +146,12 @@ class GrowwScraper:
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
             options.add_argument("--window-size=1920,1080")
-            options.add_argument(
-                "user-agent=Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36 Edg/120.0.0.0"
-            )
+            options.add_argument(f"user-agent={USER_AGENTS['edge']}")
             service = EdgeService(EdgeChromiumDriverManager().install())
             return webdriver.Edge(service=service, options=options)
         else:
             from selenium.webdriver.chrome.options import Options as ChromeOptions
             from selenium.webdriver.chrome.service import Service as ChromeService
-            from webdriver_manager.chrome import ChromeDriverManager
 
             options = ChromeOptions()
             options.add_argument("--headless=new")
@@ -90,54 +159,75 @@ class GrowwScraper:
             options.add_argument("--disable-dev-shm-usage")
             options.add_argument("--disable-gpu")
             options.add_argument("--window-size=1920,1080")
-            service = ChromeService(ChromeDriverManager().install())
+            options.add_argument("--disable-blink-features=AutomationControlled")
+            options.add_argument(f"user-agent={USER_AGENTS['chrome']}")
+            if driver_path.lower() != "auto" and os.path.exists(driver_path):
+                # e.g. the chromedriver preinstalled on GitHub's ubuntu-latest image
+                service = ChromeService(executable_path=driver_path)
+            else:
+                from webdriver_manager.chrome import ChromeDriverManager
+
+                service = ChromeService(ChromeDriverManager().install())
             return webdriver.Chrome(service=service, options=options)
+
+    def _wait_for_fund_data(self, driver) -> None:
+        """Waits for fund data to render; on timeout, carries on and lets validation decide."""
+        try:
+            from selenium.webdriver.support.ui import WebDriverWait
+
+            WebDriverWait(driver, PAGE_READY_TIMEOUT_SECONDS).until(
+                lambda d: READY_MARKER in (d.page_source or "").lower()
+            )
+        except Exception as e:  # TimeoutException or a driver hiccup
+            logger.warning(f"Fund data marker not seen within {PAGE_READY_TIMEOUT_SECONDS}s: {e}")
 
     def scrape_url(self, target: Dict[str, str], max_retries: int = 3) -> ScrapedDocument:
         """
         Scrapes a single Groww mutual fund scheme page.
         Retries up to max_retries with exponential backoff on transient errors.
+        Raises the last error if every attempt fails (no cached-HTML fallback).
         """
         url = target["url"]
         scheme_id = target.get("id", url.rstrip("/").split("/")[-1])
         scheme_name = target.get("scheme_name", scheme_id)
         category = target.get("category", "Mutual Fund")
         amc = target.get("amc", "HDFC Mutual Fund")
-        scrape_date = datetime.now().strftime("%Y-%m-%d")
+        scrape_date = ist_today()
 
-        raw_cache_path = os.path.join(self.raw_cache_dir, f"{scheme_id}.html")
+        raw_audit_path = os.path.join(self.raw_cache_dir, f"{scheme_id}.html")
 
-        # Check for cached HTML or fetch via Selenium
         html = None
+        last_error: Optional[Exception] = None
         for attempt in range(1, max_retries + 1):
             driver = None
             try:
                 logger.info(f"[{attempt}/{max_retries}] Scraping '{scheme_name}' from: {url}")
                 driver = self._create_driver()
+                driver.set_page_load_timeout(30)
                 driver.get(url)
-                time.sleep(settings.scrape_delay_seconds + 3)  # Wait for dynamic JS content
+                self._wait_for_fund_data(driver)
+                time.sleep(settings.scrape_delay_seconds)  # let late JS widgets settle
                 html = driver.page_source
 
-                # Validate content length
                 if len(html) < 2000:
                     raise ValueError(f"Extracted HTML too short ({len(html)} bytes), page may not have rendered")
 
-                # Cache raw HTML
-                with open(raw_cache_path, "w", encoding="utf-8") as f:
+                marker = detect_block_page(html)
+                if marker:
+                    raise BlockedPageError(f"Bot-block / CAPTCHA page detected (matched '{marker}')")
+
+                # Audit copy of exactly what is being indexed
+                with open(raw_audit_path, "w", encoding="utf-8") as f:
                     f.write(html)
-                logger.info(f"Cached raw HTML to {raw_cache_path} ({len(html)} bytes)")
+                logger.info(f"Wrote audit copy {raw_audit_path} ({len(html)} bytes)")
+                last_error = None
                 break
             except Exception as e:
+                last_error = e
+                html = None
                 logger.warning(f"Attempt {attempt} failed for {url}: {e}")
-                if attempt == max_retries:
-                    # Fallback to cached HTML if available
-                    if os.path.exists(raw_cache_path):
-                        logger.info(f"Using previously cached HTML from {raw_cache_path}")
-                        with open(raw_cache_path, "r", encoding="utf-8") as f:
-                            html = f.read()
-                    else:
-                        raise e
-                time.sleep(attempt * 2)
+                if attempt < max_retries:
+                    time.sleep(2 ** attempt)  # 2s, 4s backoff
             finally:
                 if driver:
                     try:
@@ -145,8 +235,12 @@ class GrowwScraper:
                     except Exception:
                         pass
 
-        # Parse and extract clean factual sections
-        return self._parse_html(html, scheme_id, scheme_name, category, url, amc, scrape_date)
+        if last_error is not None or html is None:
+            raise last_error or RuntimeError(f"No HTML fetched for {url}")
+
+        doc = self._parse_html(html, scheme_id, scheme_name, category, url, amc, scrape_date)
+        doc.page_sha256 = sha256_text(visible_text(html))
+        return doc
 
     def _parse_html(
         self,
@@ -273,16 +367,59 @@ class GrowwScraper:
         )
 
     def scrape_all(self, urls_file: str = "data/urls.json") -> List[ScrapedDocument]:
-        """Scrapes all scheme URLs defined in urls_file."""
+        """Scrapes all scheme URLs defined in urls_file.
+
+        A URL that fails after all retries is skipped and recorded in `self.failures`
+        (edge-cases.md §7.1/§7.9); the remaining URLs are still scraped.
+        """
         with open(urls_file, "r", encoding="utf-8") as f:
             targets = json.load(f)
 
         logger.info(f"Starting scraping pipeline for {len(targets)} URLs...")
+        self.failures = []
         documents = []
-        for target in targets:
-            doc = self.scrape_url(target)
-            documents.append(doc)
-            time.sleep(settings.scrape_delay_seconds)
+        for i, target in enumerate(targets):
+            try:
+                documents.append(self.scrape_url(target))
+            except Exception as e:
+                logger.error(f"Giving up on {target.get('url')}: {e}")
+                self.failures.append({
+                    "scheme_id": target.get("id", ""),
+                    "url": target.get("url", ""),
+                    "stage": "scrape",
+                    "error": f"{type(e).__name__}: {e}",
+                })
+            if i < len(targets) - 1:
+                time.sleep(settings.scrape_delay_seconds)
 
         logger.info(f"Scraping complete. Successfully scraped {len(documents)}/{len(targets)} documents.")
+        return documents
+
+    def parse_saved_pages(self, html_dir: str, urls_file: str = "data/urls.json") -> List[ScrapedDocument]:
+        """Development / manual-fallback only: parse saved `<scheme_id>.html` files instead of fetching.
+
+        The scheduled refresh never calls this; it always fetches live pages.
+        """
+        with open(urls_file, "r", encoding="utf-8") as f:
+            targets = json.load(f)
+        self.failures = []
+        documents = []
+        for target in targets:
+            scheme_id = target.get("id", target["url"].rstrip("/").split("/")[-1])
+            path = os.path.join(html_dir, f"{scheme_id}.html")
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    html = f.read()
+                marker = detect_block_page(html)
+                if marker:
+                    raise BlockedPageError(f"Bot-block / CAPTCHA page detected (matched '{marker}')")
+                doc = self._parse_html(
+                    html, scheme_id, target.get("scheme_name", scheme_id), target.get("category", "Mutual Fund"),
+                    target["url"], target.get("amc", "HDFC Mutual Fund"), ist_today(),
+                )
+                doc.page_sha256 = sha256_text(visible_text(html))
+                documents.append(doc)
+            except Exception as e:
+                self.failures.append({"scheme_id": scheme_id, "url": target.get("url", ""), "stage": "scrape",
+                                      "error": f"{type(e).__name__}: {e}"})
         return documents
