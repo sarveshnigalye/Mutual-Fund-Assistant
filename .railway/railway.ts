@@ -6,9 +6,9 @@
 //   railway config apply
 //
 // Before the first apply:
-//   1. Replace <owner>/<repo> (twice) with the GitHub repository.
+//   1. REPO below is the GitHub repository (public: SNAPSHOT_TOKEN not needed).
 //   2. Set the secrets as sealed variables (dashboard or `railway variables --service api --set ...`):
-//        api:       GROQ_API_KEY, REFRESH_TOKEN, SNAPSHOT_TOKEN (private repo only)
+//        api:       GROQ_API_KEY, REFRESH_TOKEN (SNAPSHOT_TOKEN only if the repo is made private)
 //        streamlit: API_URL = http://${{api.RAILWAY_PRIVATE_DOMAIN}}:8000/api
 //   3. Dashboard-only: generate domains, restart policy (on failure), watch paths, deploy branch
 //      master, "Wait for CI" (deployment-plan.md §D2.3).
@@ -16,7 +16,7 @@
 
 import { defineRailway, github, preserve, project, service, volume } from "railway/iac";
 
-const REPO = "<owner>/<repo>";
+const REPO = "sarveshnigalye/Mutual-Fund-Assistant";
 
 export default defineRailway(() => {
   // Persistent data for the api service: index, snapshot metadata, SQLite chat history.
@@ -48,7 +48,8 @@ export default defineRailway(() => {
       TZ: "Asia/Kolkata",
       GROQ_API_KEY: preserve(),
       REFRESH_TOKEN: preserve(),
-      SNAPSHOT_TOKEN: preserve(),
+      // Public repo: no SNAPSHOT_TOKEN. If the repo is made private, add `SNAPSHOT_TOKEN: preserve(),`
+      // and set a read-only fine-grained token as a sealed variable.
     },
   });
 
