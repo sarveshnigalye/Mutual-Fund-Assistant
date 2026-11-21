@@ -65,9 +65,9 @@ def test_pinecone_mock_upsert_and_search():
         assert results[0]["similarity_score"] == 0.92
 
 
-def test_chroma_unconfigured_initialization():
+def test_chroma_unconfigured_initialization(tmp_path):
     """Chroma store graceful fallback behavior."""
-    store = ChromaVectorStore(persist_directory="./data/test_chroma")
+    store = ChromaVectorStore(persist_directory=str(tmp_path / "test_chroma"))
     # If chromadb isn't installed/ready, is_ready is False and methods safely return empty
     if not store.is_ready():
         assert store.search(query_embedding=[0.1] * 10) == []
