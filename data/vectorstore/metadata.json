@@ -1,0 +1,123 @@
+{
+  "total_chunks": 174,
+  "total_schemes": 5,
+  "schemes": [
+    "HDFC Large Cap / Top 100 Fund",
+    "HDFC Mid-Cap Opportunities Fund",
+    "HDFC Multi Cap Fund",
+    "HDFC Silver ETF Fund of Fund (FoF)",
+    "HDFC Small Cap Fund"
+  ],
+  "source_urls": [
+    "https://groww.in/mutual-funds/hdfc-large-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-mid-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-multi-cap-fund-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-silver-etf-fof-direct-growth",
+    "https://groww.in/mutual-funds/hdfc-small-cap-fund-direct-growth"
+  ],
+  "scrape_date": "2026-11-28",
+  "embedding_type": "tfidf_bm25_hybrid",
+  "corpus_path": "data/vectorstore/corpus.json",
+  "chunks_per_scheme": {
+    "hdfc-large-cap": 31,
+    "hdfc-mid-cap": 36,
+    "hdfc-multi-cap": 39,
+    "hdfc-silver-etf-fof": 32,
+    "hdfc-small-cap": 36
+  },
+  "vocab_size": 4078,
+  "chroma": {
+    "path": "data/chroma",
+    "collection": "mf_faq_corpus",
+    "count": 174,
+    "upserted": 174,
+    "deleted": 0,
+    "reset": 0
+  },
+  "generated_at": "2026-11-28T18:52:19+05:30",
+  "run_id": "46149156934",
+  "git_sha": "88139d363684ae52ee8a7f5dcf9057da387e7b4a",
+  "staging": false,
+  "vector_db_provider": "chromadb",
+  "page_hashes": {
+    "hdfc-mid-cap": {
+      "page_sha256": "8a7d48903aad76ab1e27d60f956cf417b2aead99563daa14e061117f65a1545c",
+      "content_sha256": "e2be874ea018fbfc3524fa89ddeed129c7290ee73eaf3ed2e93db2caca23e6b2"
+    },
+    "hdfc-small-cap": {
+      "page_sha256": "61b3b3ff970089d4ba50fb10bdb37e099a2ec255cc2e3e68e6d8344d6db301a4",
+      "content_sha256": "cb13a06f55806a606c5abfd3d95818ada88d00c65088aff14d8cfa09930e691f"
+    },
+    "hdfc-large-cap": {
+      "page_sha256": "842acbe5d032ab0d5a0ae8cc0084fb1a64c36bf0dc43930343ae406bf881903c",
+      "content_sha256": "d0ce1d478abdc4395c820b9a3da784916fbb03ca42c820254ca115ff91f86988"
+    },
+    "hdfc-silver-etf-fof": {
+      "page_sha256": "317cdfb58a909db94ca22271bcb9bfc33e6ea360d64b20a292d6c3afea5b8a94",
+      "content_sha256": "26ac67da59b376ad6112cf7bd9d933b7d8ce3971a8d43f4a0b2e24be3352a05e"
+    },
+    "hdfc-multi-cap": {
+      "page_sha256": "41edfe810e7820e320e73716de6bd40ea751afacef0e609a3f9d37be368b6c2e",
+      "content_sha256": "6804e102541575bd7fe1d0f3fa46a5ebb0dc5e4a53292c5e43d211ff29810dd4"
+    }
+  },
+  "failures": [],
+  "core_facts": {
+    "hdfc-large-cap": {
+      "expense_ratio": "0.80%",
+      "exit_load": "1% if redeemed within 1 year",
+      "min_sip": "100",
+      "benchmark": "NIFTY 100 Total Return Index",
+      "riskometer": "Very High",
+      "aum": "37,466.30 Cr"
+    },
+    "hdfc-mid-cap": {
+      "expense_ratio": "0.59%",
+      "exit_load": "1% if redeemed within 1 year",
+      "min_sip": "100",
+      "benchmark": "NIFTY Midcap 150 Total Return Index",
+      "riskometer": "Very High",
+      "aum": "1,00,687.07 Cr"
+    },
+    "hdfc-multi-cap": {
+      "expense_ratio": "0.70%",
+      "exit_load": "1% if redeemed within 1 year",
+      "min_sip": "100",
+      "benchmark": "Nifty 500 Multicap 50:25:25 Total Return Index",
+      "riskometer": "Very High",
+      "aum": "19,080.08 Cr"
+    },
+    "hdfc-silver-etf-fof": {
+      "expense_ratio": "0.18%",
+      "exit_load": "1% if redeemed within 15 days",
+      "min_sip": "100",
+      "benchmark": "Domestic Price of Silver",
+      "riskometer": "Very High",
+      "aum": "3,787.89 Cr"
+    },
+    "hdfc-small-cap": {
+      "expense_ratio": "0.64%",
+      "exit_load": "1% if redeemed within 1 year",
+      "min_sip": "100",
+      "benchmark": "BSE 250 SmallCap Total Return Index",
+      "riskometer": "Very High",
+      "aum": "38,960.36 Cr"
+    }
+  },
+  "library_versions": {
+    "scikit-learn": "1.9.1",
+    "rank-bm25": "0.2.2",
+    "numpy": "2.4.6",
+    "scipy": "1.17.1",
+    "joblib": "1.6.0"
+  },
+  "stage_timings": {
+    "scrape": 53.341,
+    "normalize": 0.054,
+    "clean": 0.04,
+    "chunk": 0.003,
+    "embed": 0.036,
+    "store": 0.117
+  },
+  "promoted_at": "2026-11-28T18:52:24+05:30"
+}
